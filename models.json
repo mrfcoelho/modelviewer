@@ -1,0 +1,14 @@
+[
+  {
+    "id": "1",
+    "name": "Location A",
+    "coords": [51.505, -0.09],
+    "modelUrl": "models/model.glb"
+  },
+  {
+    "id": "2",
+    "name": "Location B",
+    "coords": [51.515, -0.1],
+    "modelUrl": "models/model.glb"
+  }
+]

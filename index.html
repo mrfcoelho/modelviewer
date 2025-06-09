@@ -2,37 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <title>BIM-AR Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Viewer</title>
-    <!-- Import the component -->
     <script
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"
     ></script>
-    <script type="module" crossorigin src="/modelviewer/assets/index-Dn_tHml5.js"></script>
-    <link rel="stylesheet" crossorigin href="/modelviewer/assets/index-BNlQkq--.css">
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script type="module" crossorigin src="/modelviewer/assets/index-C3nn_ugq.js"></script>
+    <link rel="stylesheet" crossorigin href="/modelviewer/assets/index-fjtYw89y.css">
   </head>
   <body>
-    <div id="app">
-      <model-viewer
-        src="model.glb"
-        ar
-        ar-modes="webxr scene-viewer quick-look"
-        camera-controls
-        tone-mapping="neutral"
-        poster="loading.webp"
-        shadow-intensity="1"
-      >
-        <div class="progress-bar hide" slot="progress-bar">
-          <div class="update-bar"></div>
-        </div>
-        <button slot="ar-button" id="ar-button">View in your space</button>
-        <div id="ar-prompt">
-          <img src="https://modelviewer.dev/shared-assets/icons/hand.png" />
-        </div>
-      </model-viewer>
-    </div>
-
+    <div id="app"></div>
   </body>
 </html>
