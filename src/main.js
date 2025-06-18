@@ -5,53 +5,13 @@ const app = document.getElementById("app");
 
 let leafletMap = null;
 let locations = [];
+let mapCenter = null;
+let mapZoom = null;
 
 async function fetchModelData() {
   const res = await fetch("models.json");
   if (!res.ok) throw new Error("Failed to load model data");
   return res.json();
-}
-
-function renderMapView() {
-  app.innerHTML = `<div id="map" style="height: 100%"></div>`;
-
-  if (leafletMap) {
-    leafletMap.remove();
-    leafletMap = null;
-  }
-
-  leafletMap = L.map("map");
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(leafletMap);
-
-  // Add AR model markers once
-  addLocationMarkers();
-
-  // Add custom "Center on Me" control
-  const centerControl = L.control({ position: "bottomright" });
-
-  centerControl.onAdd = function (map) {
-    const btn = L.DomUtil.create("button", "leaflet-bar center-control");
-    btn.textContent = "📍";
-    btn.title = "Center on Me";
-    btn.disabled = false;
-
-    // Prevent map click-through
-    L.DomEvent.disableClickPropagation(btn);
-
-    btn.addEventListener("click", () => {
-      locateUser(btn);
-    });
-
-    return btn;
-  };
-
-  centerControl.addTo(leafletMap);
-
-  // Attempt location on load
-  locateUser(); // optional auto-locate
 }
 
 function locateUser(controlBtn) {
@@ -88,12 +48,33 @@ function locateUser(controlBtn) {
 function addLocationMarkers() {
   locations.forEach((loc) => {
     const marker = L.marker(loc.coords).addTo(leafletMap);
-    marker.bindPopup(`
+
+    const popupContent = `
       <strong>${loc.name}</strong><br>
-      <button onclick="location.hash = '#/ar/${loc.id}'">Enter AR</button>
-    `);
+      <button class="enter-ar-btn" data-id="${loc.id}">Enter AR</button>
+    `;
+
+    marker.bindPopup(popupContent);
+
+    // Add event listener when the popup is opened
+    marker.on("popupopen", (e) => {
+      const popupEl = e.popup.getElement();
+      const btn = popupEl.querySelector(".enter-ar-btn");
+      if (btn) {
+        btn.addEventListener("click", () => goToAR(loc.id));
+      }
+    });
   });
 }
+
+function goToAR(id) {
+  if (leafletMap) {
+    mapCenter = leafletMap.getCenter();
+    mapZoom = leafletMap.getZoom();
+  }
+  location.hash = `#/ar/${id}`;
+}
+
 function renderARView(id) {
   const loc = locations.find((l) => l.id === id);
   if (!loc) return renderNotFound();
@@ -109,9 +90,43 @@ function renderARView(id) {
         autoplay
         camera-controls
         ar-scale="fixed"
+        max-field-of-view="180deg"
       ></model-viewer>
     </div>
   `;
+}
+
+function renderMapView() {
+  app.innerHTML = `<div id="map" style="height: 100%"></div>`;
+
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+  }
+
+  leafletMap = L.map("map");
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(leafletMap);
+
+  const center = mapCenter || [41.45330011034379, -8.28837129166596];
+  const zoom = mapZoom || 13;
+  leafletMap.setView(center, zoom);
+
+  addLocationMarkers();
+
+  // Add custom control again
+  const centerControl = L.control({ position: "bottomright" });
+  centerControl.onAdd = function (map) {
+    const btn = L.DomUtil.create("button", "leaflet-bar center-control");
+    btn.textContent = "📍";
+    btn.title = "Center on Me";
+    L.DomEvent.disableClickPropagation(btn);
+    btn.addEventListener("click", () => locateUser(btn));
+    return btn;
+  };
+  centerControl.addTo(leafletMap);
 }
 
 function renderNotFound() {
