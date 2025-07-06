@@ -75,8 +75,6 @@ function goToAR(id) {
   location.hash = `#/ar/${id}`;
 }
 
-//ar-modes="scene-viewer quick-look webxr "
-
 function renderARView(id) {
   const loc = locations.find((l) => l.id === id);
   if (!loc) return renderNotFound();
@@ -89,7 +87,7 @@ function renderARView(id) {
         camera-controls
         ar-scale="fixed"
         touch-action="pan-y"
-        camera-target="0m 0m 0m"
+        ar-modes="scene-viewer quick-look webxr"
         src="${loc.modelUrl}"
         alt="3D model of ${loc.name}"
       ></model-viewer>
