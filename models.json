@@ -10,5 +10,23 @@
     "name": "Location B",
     "coords": [41.453074955940195, -8.288819220548435],
     "modelUrl": "models/model.glb"
+  },
+  {
+    "id": "3",
+    "name": "estrutura_interior_exterior",
+    "coords": [41.453862226928145, -8.28819307681173],
+    "modelUrl": "models/estrutura_interior_exterior.glb"
+  },
+  {
+    "id": "4",
+    "name": "estrutura_interior",
+    "coords": [41.452694398074215, -8.288004847041949],
+    "modelUrl": "models/estrutura_interior.glb"
+  },
+  {
+    "id": "5",
+    "name": "estrutura",
+    "coords": [41.452646443035235, -8.288949529300472],
+    "modelUrl": "models/estrutura.glb"
   }
 ]
