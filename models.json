@@ -13,9 +13,9 @@
   },
   {
     "id": "3",
-    "name": "estrutura_interior_exterior",
+    "name": "exterior",
     "coords": [41.453862226928145, -8.28819307681173],
-    "modelUrl": "models/estrutura_interior_exterior.glb"
+    "modelUrl": "models/exterior.glb"
   },
   {
     "id": "4",
