@@ -26,6 +26,25 @@ html {
   color: white;
 }
 
+#infoBox {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-family: sans-serif;
+  display: none;
+  z-index: 10;
+  max-width: 250px;
+  pointer-events: none; /* evita bloquear cliques */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+}
+
+canvas {
+  display: block;
+}
+
 /* Model Viewer */
 model-viewer {
   width: 90vw;

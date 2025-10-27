@@ -1,4 +1,6 @@
 import "leaflet";
+import "@google/model-viewer";
+import * as THREE from "three";
 import "./main.css";
 
 const app = document.getElementById("app");
@@ -7,6 +9,9 @@ let leafletMap = null;
 let locations = [];
 let mapCenter = null;
 let mapZoom = null;
+
+let selectedMesh = null;
+let originalMaterial = null;
 
 async function fetchModelData() {
   const res = await fetch("models.json");
@@ -52,6 +57,11 @@ function addLocationMarkers() {
     const popupContent = `
       <strong>${loc.name}</strong><br>
       <button class="enter-ar-btn" data-id="${loc.id}">Enter AR</button>
+      <select name="ARModes" id="ARModes">
+        <option value="webxr">webxr</option>
+        <option value="scene-viewer">scene-viewer</option>
+        <option value="quick-look">quick-look</option>
+      </select>
     `;
 
     marker.bindPopup(popupContent);
@@ -60,22 +70,23 @@ function addLocationMarkers() {
     marker.on("popupopen", (e) => {
       const popupEl = e.popup.getElement();
       const btn = popupEl.querySelector(".enter-ar-btn");
+      const ARMode = document.getElementById("ARModes");
       if (btn) {
-        btn.addEventListener("click", () => goToAR(loc.id));
+        btn.addEventListener("click", () => goToAR(loc.id, ARMode.value));
       }
     });
   });
 }
 
-function goToAR(id) {
+function goToAR(id, armode) {
   if (leafletMap) {
     mapCenter = leafletMap.getCenter();
     mapZoom = leafletMap.getZoom();
   }
-  location.hash = `#/ar/${id}`;
+  location.hash = `#/ar/${id}-${armode}`;
 }
 
-function renderARView(id) {
+function renderARView(id, armode) {
   const loc = locations.find((l) => l.id === id);
   if (!loc) return renderNotFound();
 
@@ -83,16 +94,125 @@ function renderARView(id) {
     <div id="ar-view">
       <button class="btn" onclick="location.hash = '#'">← Back to Map</button>
       <model-viewer
+        id="mv"
         ar
         camera-controls
         ar-scale="fixed"
         touch-action="pan-y"
-        ar-modes="scene-viewer quick-look webxr"
+        disable-tap
+        ar-modes="${armode}"
         src="${loc.modelUrl}"
         alt="3D model of ${loc.name}"
-      ></model-viewer>
+      >
+      </model-viewer>
     </div>
+    <div id="infoBox"></div>
   `;
+
+  const modelViewer = document.querySelector("model-viewer#mv");
+
+  const symbols = Object.getOwnPropertySymbols(modelViewer);
+  const mvSceneSymbol = symbols.find((s) => s.description === "scene");
+
+  if (!mvSceneSymbol) {
+    console.warn("Not able to find symbol “scene” in <model-viewer>");
+    return;
+  }
+  const threeScene = modelViewer[mvSceneSymbol];
+  console.log("cena do three", threeScene);
+  console.log("filhos ", threeScene.children);
+
+  const raycaster = new THREE.Raycaster();
+  const touch = new THREE.Vector2();
+
+  modelViewer.addEventListener("load", () => {
+    // const originalGltfJson = modelViewer.originalGltfJson;
+    // console.log(originalGltfJson);
+
+    const pickObjects = (event) => {
+      // console.log(event);
+      const rect = modelViewer.getBoundingClientRect();
+
+      //Normalized Device Coordinates (-1..1)
+      touch.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      touch.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      //get camera from three scene
+      const camera = threeScene.camera;
+
+      // update raycaster with current position of click and camera
+      raycaster.setFromCamera(touch, camera);
+
+      // check scene to find the objects intersected
+      const intersects = raycaster.intersectObjects(threeScene.children, true);
+      // console.log(intersects);
+
+      if (intersects.length > 0) {
+        const object = intersects[0].object;
+        console.log("objecto clicado: ", object);
+        console.log("Nome: ", object.name || "(sem nome)");
+        console.log("BIM Info :", object.userData);
+
+        // Se já havia uma mesh selecionada, restaurar
+        if (selectedMesh) {
+          selectedMesh.material = originalMaterial;
+          selectedMesh = null;
+          originalMaterial = null;
+        }
+
+        // Guardar material original e destacar a nova
+        originalMaterial = object.material.clone();
+        selectedMesh = object;
+        object.material = object.material.clone();
+        object.material.color.set(0xff4444); // cor de destaque
+
+        // Mostrar info box
+        infoBox.textContent = `Nome: ${object.name || "(sem nome)"}`;
+        infoBox.style.display = "block";
+
+        positionInfoBox(event);
+      } else {
+        console.log("nada intersetado");
+        // Clicou fora de qualquer mesh → limpar seleção
+        if (selectedMesh) {
+          selectedMesh.material = originalMaterial;
+          selectedMesh = null;
+          originalMaterial = null;
+        }
+        infoBox.style.display = "none";
+      }
+    };
+
+    document.addEventListener("click", pickObjects);
+  });
+}
+
+function positionInfoBox(event) {
+  const padding = 10;
+  const boxWidth = infoBox.offsetWidth;
+  const boxHeight = infoBox.offsetHeight;
+  const screenW = window.innerWidth;
+  const screenH = window.innerHeight;
+
+  let x = event.clientX + 15; // ligeiro offset
+  let y = event.clientY + 15;
+
+  // Ajustar se sair fora da direita
+  if (x + boxWidth + padding > screenW) {
+    x = screenW - boxWidth - padding;
+  }
+
+  // Ajustar se sair fora de baixo
+  if (y + boxHeight + padding > screenH) {
+    y = screenH - boxHeight - padding;
+  }
+
+  // Evitar sair fora da esquerda ou topo
+  x = Math.max(padding, x);
+  y = Math.max(padding, y);
+
+  infoBox.style.left = `${x}px`;
+  infoBox.style.top = `${y}px`;
 }
 
 function renderMapView() {
@@ -139,12 +259,12 @@ function renderNotFound() {
 
 function router() {
   const hash = location.hash || "#";
-  const match = hash.match(/^#\/ar\/(\d+)$/);
+  const match = hash.match(/^#\/ar\/(\d+)-([a-z||-]+)$/);
 
   if (hash === "#") {
     renderMapView();
   } else if (match) {
-    renderARView(match[1]);
+    renderARView(match[1], match[2]);
   } else {
     renderNotFound();
   }

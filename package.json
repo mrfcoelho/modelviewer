@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "vite": "^6.3.5"
+    "vite": "^6.3.6"
   },
   "dependencies": {
-    "leaflet": "^1.9.4"
+    "@google/model-viewer": "^4.1.0",
+    "leaflet": "^1.9.4",
+    "three": "^0.180.0"
   }
 }
