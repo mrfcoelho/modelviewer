@@ -1,32 +1,44 @@
 [
   {
     "id": "1",
-    "name": "Location A",
+    "name": "CCG",
     "coords": [41.45330011034379, -8.28837129166596],
     "modelUrl": "models/ccg.glb"
   },
   {
     "id": "2",
-    "name": "Location B",
+    "name": "Moradia T0",
     "coords": [41.453074955940195, -8.288819220548435],
     "modelUrl": "models/model.glb"
   },
   {
     "id": "3",
-    "name": "exterior",
+    "name": "Arranjo Exterior",
     "coords": [41.453862226928145, -8.28819307681173],
     "modelUrl": "models/exterior.glb"
   },
   {
     "id": "4",
-    "name": "estrutura_interior",
+    "name": "Escola Interior",
     "coords": [41.452694398074215, -8.288004847041949],
     "modelUrl": "models/estrutura_interior.glb"
   },
   {
     "id": "5",
-    "name": "estrutura",
+    "name": "Escola Estrutura",
     "coords": [41.452646443035235, -8.288949529300472],
     "modelUrl": "models/estrutura.glb"
+  },
+  {
+    "id": "6",
+    "name": "Café",
+    "coords": [41.4526464430352, -8.2899495293004],
+    "modelUrl": "models/cafe.glb"
+  },
+  {
+    "id": "7",
+    "name": "Moradia T4",
+    "coords": [41.4526464430352, -8.2886495293004],
+    "modelUrl": "models/house.glb"
   }
 ]
