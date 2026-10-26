@@ -4,11 +4,20 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -20,17 +29,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Install dependencies
-        uses: bahmutov/npm-install@v1
-        with:
-          install-command: npm i --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
-      - name: Build project
+      - name: Build production site
+        if: github.event_name == 'push'
         run: npm run build
 
-      - name: Upload production-ready build files
+      - name: Build PR preview
+        if: github.event_name == 'pull_request'
+        run: npm run build -- --base /modelviewer/preview/
+
+      - name: Upload built site
         uses: actions/upload-artifact@v4
         with:
           name: production-files
@@ -40,7 +54,12 @@ jobs:
     name: Deploy
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: write
 
     steps:
       - name: Download artifact
@@ -54,3 +73,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
+          destination_dir: ${{ github.event_name == 'pull_request' && 'preview' || '' }}
+          keep_files: ${{ github.event_name == 'push' }}

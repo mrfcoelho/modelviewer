@@ -1,22 +1,58 @@
-import "leaflet";
+import * as L from "leaflet";
 import "@google/model-viewer";
 import * as THREE from "three";
 import "./main.css";
 
 const app = document.getElementById("app");
+const arModes = ["webxr", "scene-viewer", "quick-look"];
 
 let leafletMap = null;
 let locations = [];
 let mapCenter = null;
 let mapZoom = null;
-
-let selectedMesh = null;
-let originalMaterial = null;
+let cleanupARView = null;
 
 async function fetchModelData() {
   const res = await fetch("models.json");
   if (!res.ok) throw new Error("Failed to load model data");
-  return res.json();
+  return validateModelData(await res.json());
+}
+
+function validateModelData(data) {
+  if (!Array.isArray(data)) {
+    throw new Error("Model data must be an array");
+  }
+
+  const ids = new Set();
+  return data.map((loc, index) => {
+    if (
+      !loc ||
+      typeof loc.id !== "string" ||
+      !/^\d+$/.test(loc.id) ||
+      ids.has(loc.id) ||
+      typeof loc.name !== "string" ||
+      !loc.name.trim() ||
+      !Array.isArray(loc.coords) ||
+      loc.coords.length !== 2 ||
+      !Number.isFinite(loc.coords[0]) ||
+      !Number.isFinite(loc.coords[1]) ||
+      Math.abs(loc.coords[0]) > 90 ||
+      Math.abs(loc.coords[1]) > 180 ||
+      typeof loc.modelUrl !== "string" ||
+      !/^models\/[A-Za-z0-9._/-]+\.(glb|gltf)$/i.test(loc.modelUrl) ||
+      loc.modelUrl.split("/").includes("..")
+    ) {
+      throw new Error(`Invalid model data at entry ${index}`);
+    }
+
+    ids.add(loc.id);
+    return {
+      id: loc.id,
+      name: loc.name.trim(),
+      coords: loc.coords,
+      modelUrl: loc.modelUrl,
+    };
+  });
 }
 
 function locateUser(controlBtn) {
@@ -54,140 +90,149 @@ function addLocationMarkers() {
   locations.forEach((loc) => {
     const marker = L.marker(loc.coords).addTo(leafletMap);
 
-    const popupContent = `
-      <strong>${loc.name}</strong><br>
-      <button class="enter-ar-btn" data-id="${loc.id}">Enter AR</button>
-      <select name="ARModes" id="ARModes">
-        <option value="webxr">webxr</option>
-        <option value="scene-viewer">scene-viewer</option>
-        <option value="quick-look">quick-look</option>
-      </select>
-    `;
+    const popupContent = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = loc.name;
+    popupContent.append(name, document.createElement("br"));
 
-    marker.bindPopup(popupContent);
-
-    // Add event listener when the popup is opened
-    marker.on("popupopen", (e) => {
-      const popupEl = e.popup.getElement();
-      const btn = popupEl.querySelector(".enter-ar-btn");
-      const ARMode = document.getElementById("ARModes");
-      if (btn) {
-        btn.addEventListener("click", () => goToAR(loc.id, ARMode.value));
-      }
+    const modeSelect = document.createElement("select");
+    modeSelect.setAttribute("aria-label", "AR mode");
+    arModes.forEach((mode) => {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = mode;
+      modeSelect.append(option);
     });
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Enter AR";
+    button.addEventListener("click", () => goToAR(loc.id, modeSelect.value));
+
+    popupContent.append(button, modeSelect);
+    marker.bindPopup(popupContent);
   });
 }
 
-function goToAR(id, armode) {
+function goToAR(id, arMode) {
   if (leafletMap) {
     mapCenter = leafletMap.getCenter();
     mapZoom = leafletMap.getZoom();
   }
-  location.hash = `#/ar/${id}-${armode}`;
+  location.hash = `#/ar/${id}-${arMode}`;
 }
 
-function renderARView(id, armode) {
+function renderARView(id, arMode) {
   const loc = locations.find((l) => l.id === id);
   if (!loc) return renderNotFound();
 
-  app.innerHTML = `
-    <div id="ar-view">
-      <button class="btn" onclick="location.hash = '#'">← Back to Map</button>
-      <model-viewer
-        id="mv"
-        ar
-        camera-controls
-        ar-scale="fixed"
-        touch-action="pan-y"
-        disable-tap
-        ar-modes="${armode}"
-        src="${loc.modelUrl}"
-        alt="3D model of ${loc.name}"
-      >
-      </model-viewer>
-    </div>
-    <div id="infoBox"></div>
-  `;
+  if (cleanupARView) cleanupARView();
 
-  const modelViewer = document.querySelector("model-viewer#mv");
+  const arView = document.createElement("div");
+  arView.id = "ar-view";
 
-  const symbols = Object.getOwnPropertySymbols(modelViewer);
-  const mvSceneSymbol = symbols.find((s) => s.description === "scene");
+  const backButton = document.createElement("button");
+  backButton.className = "btn";
+  backButton.type = "button";
+  backButton.textContent = "← Back to Map";
+  backButton.addEventListener("click", () => {
+    location.hash = "#";
+  });
 
-  if (!mvSceneSymbol) {
-    console.warn("Not able to find symbol “scene” in <model-viewer>");
-    return;
-  }
-  const threeScene = modelViewer[mvSceneSymbol];
-  console.log("cena do three", threeScene);
-  console.log("filhos ", threeScene.children);
+  const modelViewer = document.createElement("model-viewer");
+  modelViewer.id = "mv";
+  modelViewer.setAttribute("ar", "");
+  modelViewer.setAttribute("camera-controls", "");
+  modelViewer.setAttribute("ar-scale", "fixed");
+  modelViewer.setAttribute("touch-action", "pan-y");
+  modelViewer.setAttribute("disable-tap", "");
+  modelViewer.setAttribute("ar-modes", arMode);
+  modelViewer.setAttribute("src", loc.modelUrl);
+  modelViewer.setAttribute("alt", `3D model of ${loc.name}`);
+
+  const infoBox = document.createElement("div");
+  infoBox.id = "infoBox";
+
+  arView.append(backButton, modelViewer);
+  app.replaceChildren(arView, infoBox);
 
   const raycaster = new THREE.Raycaster();
   const touch = new THREE.Vector2();
+  let threeScene = null;
+  let selectedMesh = null;
+  let originalMaterial = null;
+  let highlightMaterial = null;
 
-  modelViewer.addEventListener("load", () => {
-    // const originalGltfJson = modelViewer.originalGltfJson;
-    // console.log(originalGltfJson);
-
-    const pickObjects = (event) => {
-      // console.log(event);
-      const rect = modelViewer.getBoundingClientRect();
-
-      //Normalized Device Coordinates (-1..1)
-      touch.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      touch.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      //get camera from three scene
-      const camera = threeScene.camera;
-
-      // update raycaster with current position of click and camera
-      raycaster.setFromCamera(touch, camera);
-
-      // check scene to find the objects intersected
-      const intersects = raycaster.intersectObjects(threeScene.children, true);
-      // console.log(intersects);
-
-      if (intersects.length > 0) {
-        const object = intersects[0].object;
-        console.log("objecto clicado: ", object);
-        console.log("Nome: ", object.name || "(sem nome)");
-        console.log("BIM Info :", object.userData);
-
-        // Se já havia uma mesh selecionada, restaurar
-        if (selectedMesh) {
-          selectedMesh.material = originalMaterial;
-          selectedMesh = null;
-          originalMaterial = null;
-        }
-
-        // Guardar material original e destacar a nova
-        originalMaterial = object.material.clone();
-        selectedMesh = object;
-        object.material = object.material.clone();
-        object.material.color.set(0xff4444); // cor de destaque
-
-        // Mostrar info box
-        infoBox.textContent = `Nome: ${object.name || "(sem nome)"}`;
-        infoBox.style.display = "block";
-
-        positionInfoBox(event);
-      } else {
-        console.log("nada intersetado");
-        // Clicou fora de qualquer mesh → limpar seleção
-        if (selectedMesh) {
-          selectedMesh.material = originalMaterial;
-          selectedMesh = null;
-          originalMaterial = null;
-        }
-        infoBox.style.display = "none";
+  function clearSelection() {
+    if (selectedMesh) {
+      selectedMesh.material = originalMaterial;
+      if (Array.isArray(highlightMaterial)) {
+        highlightMaterial.forEach((material) => material.dispose());
+      } else if (highlightMaterial) {
+        highlightMaterial.dispose();
       }
-    };
+      selectedMesh = null;
+      originalMaterial = null;
+      highlightMaterial = null;
+    }
+    infoBox.style.display = "none";
+  }
 
-    document.addEventListener("click", pickObjects);
-  });
+  function pickObjects(event) {
+    if (!threeScene || !threeScene.camera) return;
+
+    const rect = modelViewer.getBoundingClientRect();
+    touch.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    touch.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(touch, threeScene.camera);
+
+    const intersects = raycaster.intersectObjects(threeScene.children, true);
+    const object = intersects[0] && intersects[0].object;
+    if (!object || !object.isMesh || !object.material) {
+      clearSelection();
+      return;
+    }
+
+    clearSelection();
+    selectedMesh = object;
+    originalMaterial = object.material;
+    const createHighlight = (material) => {
+      const highlighted = material.clone();
+      if (highlighted.color) highlighted.color.set(0xff4444);
+      return highlighted;
+    };
+    highlightMaterial = Array.isArray(originalMaterial)
+      ? originalMaterial.map(createHighlight)
+      : createHighlight(originalMaterial);
+    object.material = highlightMaterial;
+
+    infoBox.textContent = `Name: ${object.name || "(unnamed)"}`;
+    infoBox.style.display = "block";
+    positionInfoBox(event, infoBox);
+  }
+
+  function onModelLoad() {
+    const sceneSymbol = Object.getOwnPropertySymbols(modelViewer).find(
+      (symbol) => symbol.description === "scene",
+    );
+    if (!sceneSymbol) {
+      console.warn("Unable to access the model-viewer scene for object selection");
+      return;
+    }
+    threeScene = modelViewer[sceneSymbol];
+    modelViewer.addEventListener("click", pickObjects);
+  }
+
+  modelViewer.addEventListener("load", onModelLoad, { once: true });
+  cleanupARView = () => {
+    modelViewer.removeEventListener("load", onModelLoad);
+    modelViewer.removeEventListener("click", pickObjects);
+    clearSelection();
+    cleanupARView = null;
+  };
 }
 
-function positionInfoBox(event) {
+function positionInfoBox(event, infoBox) {
   const padding = 10;
   const boxWidth = infoBox.offsetWidth;
   const boxHeight = infoBox.offsetHeight;
@@ -216,7 +261,11 @@ function positionInfoBox(event) {
 }
 
 function renderMapView() {
-  app.innerHTML = `<div id="map" style="height: 100%"></div>`;
+  if (cleanupARView) cleanupARView();
+
+  const mapElement = document.createElement("div");
+  mapElement.id = "map";
+  app.replaceChildren(mapElement);
 
   if (leafletMap) {
     leafletMap.remove();
@@ -249,21 +298,27 @@ function renderMapView() {
 }
 
 function renderNotFound() {
-  app.innerHTML = `
-    <div style="padding: 2rem; text-align: center;">
-      <h2>404 - Page Not Found</h2>
-      <a href="#">Back to Home</a>
-    </div>
-  `;
+  if (cleanupARView) cleanupARView();
+
+  const container = document.createElement("div");
+  container.style.padding = "2rem";
+  container.style.textAlign = "center";
+  const heading = document.createElement("h2");
+  heading.textContent = "404 - Page Not Found";
+  const backLink = document.createElement("a");
+  backLink.href = "#";
+  backLink.textContent = "Back to Home";
+  container.append(heading, backLink);
+  app.replaceChildren(container);
 }
 
 function router() {
   const hash = location.hash || "#";
-  const match = hash.match(/^#\/ar\/(\d+)-([a-z||-]+)$/);
+  const match = hash.match(/^#\/ar\/(\d+)-([a-z-]+)$/);
 
   if (hash === "#") {
     renderMapView();
-  } else if (match) {
+  } else if (match && arModes.includes(match[2])) {
     renderARView(match[1], match[2]);
   } else {
     renderNotFound();
