@@ -44,10 +44,29 @@ html {
   font-family: sans-serif;
   display: none;
   z-index: 10;
-  max-width: 250px;
-  pointer-events: none; /* evita bloquear cliques */
+  max-width: min(360px, calc(100vw - 2rem));
+  max-height: 55vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  pointer-events: auto;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
   font-size: 14px;
+  line-height: 1.4;
+}
+
+#infoBox p {
+  margin: 0.45rem 0;
+}
+
+#infoBox ul {
+  margin: 0.35rem 0 0.75rem;
+  padding-left: 1.2rem;
+}
+
+#infoBox li {
+  overflow-wrap: anywhere;
 }
 
 .model-status {

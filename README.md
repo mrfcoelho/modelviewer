@@ -10,12 +10,23 @@ npm run dev
 Execute `npm test` para validar as regras dos dados dos projetos e `npm run build`
 para gerar a versão de produção.
 
-## Demonstração de submissão
+## Submissão e processamento IFC
 
-A área de submissão aceita um ficheiro IFC para demonstrar o fluxo, mas não o
-envia nem converte. Os dados submetidos ficam em `sessionStorage` no navegador
-atual e desaparecem quando a sessão do separador termina. Para ver o projeto no
-mapa, pode associar-lhe um dos modelos GLB de demonstração.
+A área de submissão processa os ficheiros IFC localmente com IFClite e converte
+a geometria para GLB no navegador. O projeto, o modelo convertido e o IFC
+original ficam guardados em IndexedDB neste navegador; não são enviados para um
+backend nem sincronizados com outros dispositivos. O mapa continua a carregar
+tiles do OpenStreetMap. Os modelos pré-carregados continuam a ser servidos a
+partir de `public/models/`.
+
+No visualizador, tocar num elemento de um modelo convertido mostra os nomes
+originais dos atributos, conjuntos de propriedades e quantidades IFC. Geometria
+da biblioteca de tipos (`IfcTypeProduct`) não é incluída no GLB. A primeira
+consulta após recarregar a página volta a analisar o IFC original e pode demorar
+alguns instantes. Apagar os dados do site no navegador também remove os projetos
+locais. No Android, o Scene Viewer não consegue abrir modelos mantidos numa URL
+`blob:`; para esses modelos, use WebXR (ou Quick Look em dispositivos
+compatíveis).
 
 As rotas da aplicação usam hash para funcionarem diretamente no GitHub Pages:
 `#/` (início), `#/explorar`, `#/submeter` e `#/ar/<id>-<modo>`.

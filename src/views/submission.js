@@ -3,7 +3,7 @@ import { saveLocalProject } from "../services/project-data.js";
 
 const defaultCoordinates = [41.45330011034379, -8.28837129166596];
 
-export async function renderSubmission(app, projects, navigate, onSubmitted) {
+export async function renderSubmission(app, navigate, onSubmitted) {
   const L = await import("leaflet");
   if (location.hash !== "#/submeter") return;
   const page = document.createElement("main");
@@ -17,7 +17,7 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
   const introduction = document.createElement("p");
   introduction.className = "intro";
   introduction.textContent =
-    "Esta demonstração guarda os dados apenas nesta sessão do navegador. O ficheiro IFC não é enviado nem convertido.";
+    "O IFC é convertido em GLB neste navegador. O ficheiro e os dados da submissão não são enviados para um backend nem sincronizados; o mapa utiliza tiles do OpenStreetMap.";
   content.append(heading, introduction);
 
   const form = document.createElement("form");
@@ -31,7 +31,7 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
   const fileHelp = document.createElement("small");
   fileHelp.id = "file-help";
   fileHelp.textContent =
-    "O ficheiro é usado apenas para simular a submissão e não sai do seu computador.";
+    "O ficheiro original e o modelo convertido ficam guardados neste navegador.";
   const selectedFile = document.createElement("p");
   selectedFile.id = "selected-file";
   selectedFile.className = "selected-file";
@@ -93,27 +93,6 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
   draftStatus.className = "status-badge status-draft";
   draftStatus.textContent = "Estado: Rascunho";
 
-  const demoSelect = document.createElement("select");
-  demoSelect.name = "demo-model";
-  const noDemoOption = document.createElement("option");
-  noDemoOption.value = "";
-  noDemoOption.textContent = "Sem modelo de demonstração";
-  demoSelect.append(noDemoOption);
-  projects
-    .filter((project) => project.modelUrl)
-    .forEach((project) => {
-      const option = document.createElement("option");
-      option.value = project.id;
-      option.textContent = project.name;
-      demoSelect.append(option);
-    });
-  form.append(
-    createField(
-      "Modelo GLB para demonstração (opcional)",
-      demoSelect,
-    ),
-  );
-
   const feedback = document.createElement("p");
   feedback.className = "form-feedback";
   feedback.setAttribute("role", "status");
@@ -121,7 +100,7 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
   const submitButton = document.createElement("button");
   submitButton.className = "primary-button";
   submitButton.type = "submit";
-  submitButton.textContent = "Simular submissão";
+  submitButton.textContent = "Converter e guardar projeto";
   form.append(draftStatus, feedback, submitButton);
   content.append(form);
   page.append(content);
@@ -165,9 +144,6 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
       return;
     }
 
-    const demoProject = projects.find(
-      (project) => project.id === demoSelect.value,
-    );
     const project = {
       id: `local-${crypto.randomUUID()}`,
       name: nameInput.value.trim(),
@@ -175,22 +151,32 @@ export async function renderSubmission(app, projects, navigate, onSubmitted) {
       responsible: responsibleInput.value.trim(),
       status: "submitted",
       coords: [Number(latitudeInput.value), Number(longitudeInput.value)],
-      modelUrl: demoProject?.modelUrl || null,
+      modelUrl: null,
       fileName: file.name,
     };
 
     submitButton.disabled = true;
-    feedback.textContent = "A preparar a demonstração de submissão…";
-    await new Promise((resolve) => setTimeout(resolve, 900));
 
     try {
-      const savedProject = saveLocalProject(project);
+      feedback.textContent = "A carregar o processador IFC…";
+      const { processIfcFile } = await import("../services/ifc-processing.js");
+      const { modelBlob, elementCount } = await processIfcFile(
+        file,
+        (message) => {
+          feedback.textContent = message;
+        },
+      );
+      if (!form.isConnected) return;
+
+      feedback.textContent = "A guardar o projeto neste navegador…";
+      const savedProject = await saveLocalProject(project, modelBlob, file);
       onSubmitted(savedProject);
-      renderConfirmation(app, savedProject, navigate);
+      if (!form.isConnected) return;
+      renderConfirmation(app, savedProject, navigate, elementCount);
     } catch (error) {
-      console.error("Não foi possível guardar a submissão local:", error);
-      feedback.textContent =
-        "Não foi possível guardar o projeto nesta sessão. Verifique o armazenamento do navegador e tente novamente.";
+      console.error("Não foi possível processar ou guardar o projeto:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      feedback.textContent = `Não foi possível processar ou guardar o projeto: ${message}`;
       feedback.classList.add("form-feedback-error");
       submitButton.disabled = false;
     }
@@ -236,7 +222,7 @@ function createInput(type, name) {
   return input;
 }
 
-function renderConfirmation(app, project, navigate) {
+function renderConfirmation(app, project, navigate, elementCount) {
   const confirmation = document.createElement("main");
   confirmation.className = "confirmation-page";
   const card = document.createElement("section");
@@ -247,7 +233,7 @@ function renderConfirmation(app, project, navigate) {
   name.textContent = project.name;
   const detail = document.createElement("p");
   detail.textContent =
-    "O projeto ficou disponível no mapa desta sessão. A submissão não foi enviada para um servidor.";
+    `Modelo 3D gerado com ${elementCount} elementos IFC. O projeto está disponível no mapa e guardado apenas neste navegador; não foi enviado para um backend.`;
   const exploreButton = document.createElement("button");
   exploreButton.className = "primary-button";
   exploreButton.type = "button";

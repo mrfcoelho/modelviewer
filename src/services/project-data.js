@@ -1,5 +1,8 @@
-const SESSION_PROJECTS_KEY = "bim-ar:submitted-projects";
+const DATABASE_NAME = "bim-ar-projects";
+const DATABASE_VERSION = 1;
+const PROJECTS_STORE = "projects";
 const projectStatuses = ["draft", "submitted", "approved"];
+const localModelUrls = new Map();
 
 export function validateProjects(data) {
   if (!Array.isArray(data)) {
@@ -52,6 +55,7 @@ export function validateProjects(data) {
 
 export function getModelUrl(modelPath) {
   if (!modelPath) return null;
+  if (modelPath.startsWith("blob:")) return modelPath;
   const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
   return new URL(modelPath, baseUrl).href;
 }
@@ -63,45 +67,172 @@ export async function loadProjects() {
   );
   const response = await fetch(modelsUrl);
   if (!response.ok) {
-    throw new Error(`Não foi possível carregar os projetos (${response.status}).`);
+    throw new Error(
+      `Não foi possível carregar os projetos (${response.status}).`,
+    );
   }
 
   const publishedProjects = validateProjects(await response.json());
-  const localProjects = loadLocalProjects();
+  const localProjects = await loadLocalProjects();
   const ids = new Set(publishedProjects.map((project) => project.id));
   if (localProjects.some((project) => ids.has(project.id))) {
-    throw new Error("Existem identificadores repetidos nos projetos desta sessão.");
+    throw new Error("Existem identificadores repetidos nos projetos locais.");
   }
 
   return [...publishedProjects, ...localProjects];
 }
 
-export function loadLocalProjects() {
-  const storedProjects = sessionStorage.getItem(SESSION_PROJECTS_KEY);
-  if (!storedProjects) return [];
-
-  let parsedProjects;
-  try {
-    parsedProjects = JSON.parse(storedProjects);
-  } catch (error) {
-    throw new Error("Os projetos guardados nesta sessão não são válidos.", {
-      cause: error,
-    });
-  }
-
-  return validateProjects(parsedProjects);
+export async function loadLocalProjects() {
+  const records = await readAllLocalRecords();
+  return records.map(({ project, modelBlob }) => {
+    const [validatedProject] = validateProjects([project]);
+    return {
+      ...validatedProject,
+      localModel: Boolean(modelBlob),
+      modelUrl: modelBlob
+        ? getOrCreateModelUrl(validatedProject.id, modelBlob)
+        : null,
+    };
+  });
 }
 
-export function saveLocalProject(project) {
-  const localProjects = loadLocalProjects();
+export async function saveLocalProject(project, modelBlob, ifcBlob) {
   const [validatedProject] = validateProjects([project]);
-  if (localProjects.some(({ id }) => id === validatedProject.id)) {
-    throw new Error("Já existe um projeto com este identificador nesta sessão.");
+  if (!(modelBlob instanceof Blob) || modelBlob.size === 0) {
+    throw new Error("O modelo GLB convertido não é válido.");
+  }
+  if (!(ifcBlob instanceof Blob) || ifcBlob.size === 0) {
+    throw new Error("O ficheiro IFC original não é válido.");
   }
 
-  sessionStorage.setItem(
-    SESSION_PROJECTS_KEY,
-    JSON.stringify([...localProjects, validatedProject]),
+  const record = {
+    id: validatedProject.id,
+    project: validatedProject,
+    modelBlob,
+    ifcBlob,
+  };
+
+  try {
+    await writeLocalRecord(record);
+  } catch (error) {
+    if (error?.cause?.name === "ConstraintError") {
+      throw new Error("Já existe um projeto com este identificador.", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+
+  return {
+    ...validatedProject,
+    localModel: true,
+    modelUrl: getOrCreateModelUrl(validatedProject.id, modelBlob),
+  };
+}
+
+export async function getLocalIfcBlob(projectId) {
+  const record = await readLocalRecord(projectId);
+  return record?.ifcBlob || null;
+}
+
+function openDatabase() {
+  if (!globalThis.indexedDB) {
+    return Promise.reject(
+      new Error("Este navegador não disponibiliza o armazenamento IndexedDB."),
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(PROJECTS_STORE)) {
+        request.result.createObjectStore(PROJECTS_STORE, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(
+        new Error("Não foi possível abrir o armazenamento local.", {
+          cause: request.error,
+        }),
+      );
+    request.onblocked = () =>
+      reject(
+        new Error(
+          "O armazenamento local está bloqueado por outra versão aberta da aplicação.",
+        ),
+      );
+  });
+}
+
+async function readAllLocalRecords() {
+  const database = await openDatabase();
+  const transaction = database.transaction(PROJECTS_STORE, "readonly");
+  const result = requestResult(transaction.objectStore(PROJECTS_STORE).getAll());
+  const complete = transactionResult(transaction);
+  try {
+    const [records] = await Promise.all([result, complete]);
+    return records;
+  } finally {
+    database.close();
+  }
+}
+
+async function readLocalRecord(projectId) {
+  const database = await openDatabase();
+  const transaction = database.transaction(PROJECTS_STORE, "readonly");
+  const result = requestResult(
+    transaction.objectStore(PROJECTS_STORE).get(projectId),
   );
-  return validatedProject;
+  const complete = transactionResult(transaction);
+  try {
+    const [record] = await Promise.all([result, complete]);
+    return record;
+  } finally {
+    database.close();
+  }
+}
+
+async function writeLocalRecord(record) {
+  const database = await openDatabase();
+  const transaction = database.transaction(PROJECTS_STORE, "readwrite");
+  const complete = transactionResult(transaction);
+  try {
+    transaction.objectStore(PROJECTS_STORE).add(record);
+    await complete;
+  } finally {
+    database.close();
+  }
+}
+
+function requestResult(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(
+        new Error("Não foi possível ler o armazenamento local.", {
+          cause: request.error,
+        }),
+      );
+  });
+}
+
+function transactionResult(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = transaction.onerror = () =>
+      reject(
+        new Error(
+          "Não foi possível concluir a operação no armazenamento local.",
+          { cause: transaction.error },
+        ),
+      );
+  });
+}
+
+function getOrCreateModelUrl(projectId, modelBlob) {
+  if (!localModelUrls.has(projectId)) {
+    localModelUrls.set(projectId, URL.createObjectURL(modelBlob));
+  }
+  return localModelUrls.get(projectId);
 }

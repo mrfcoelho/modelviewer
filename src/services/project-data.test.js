@@ -18,7 +18,7 @@ test("validates and normalizes project records", () => {
   assert.deepEqual(project.coords, [41.45, -8.28]);
 });
 
-test("accepts a submitted local project without a demo model", () => {
+test("accepts a submitted local project without a published model path", () => {
   const [project] = validateProjects([
     { ...validProject, id: "local-demo", modelUrl: null },
   ]);

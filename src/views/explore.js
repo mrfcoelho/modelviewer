@@ -1,5 +1,6 @@
 import "leaflet/dist/leaflet.css";
 import { getModelUrl } from "../services/project-data.js";
+import { getIfcElementInfo } from "../services/ifc-properties.js";
 
 const arModes = ["webxr", "scene-viewer", "quick-look"];
 let leafletMap = null;
@@ -89,6 +90,8 @@ export async function renderAR(app, project, arMode, navigate) {
   modelContainer.append(modelStatus);
   const infoBox = document.createElement("div");
   infoBox.id = "infoBox";
+  infoBox.setAttribute("role", "status");
+  infoBox.setAttribute("aria-live", "polite");
   page.append(backButton, modelContainer, infoBox);
   app.replaceChildren(page);
 
@@ -96,6 +99,7 @@ export async function renderAR(app, project, arMode, navigate) {
   let selectedMaterial = null;
   let originalEmissiveFactor = null;
   let disposed = false;
+  let selectionVersion = 0;
 
   function setStatus(message, retry = false) {
     modelStatus.replaceChildren();
@@ -115,6 +119,7 @@ export async function renderAR(app, project, arMode, navigate) {
   }
 
   function clearSelection() {
+    selectionVersion += 1;
     if (selectedMaterial) {
       selectedMaterial.setEmissiveFactor(originalEmissiveFactor);
       selectedMaterial = null;
@@ -123,7 +128,7 @@ export async function renderAR(app, project, arMode, navigate) {
     infoBox.style.display = "none";
   }
 
-  function onModelClick(event) {
+  async function onModelClick(event) {
     const material = modelViewer.materialFromPoint(
       event.clientX,
       event.clientY,
@@ -137,9 +142,30 @@ export async function renderAR(app, project, arMode, navigate) {
     selectedMaterial = material;
     originalEmissiveFactor = [...material.emissiveFactor];
     material.setEmissiveFactor([1, 0, 0]);
-    infoBox.textContent = `Material: ${material.name || "(sem nome)"}`;
     infoBox.style.display = "block";
     positionInfoBox(event, infoBox);
+
+    const ifcElement = material.name?.match(/^ifc-element-(\d+)$/);
+    if (!ifcElement) {
+      infoBox.textContent = `Material: ${material.name || "(sem nome)"}`;
+      return;
+    }
+
+    const version = selectionVersion;
+    const expressId = Number(ifcElement[1]);
+    infoBox.textContent = `Elemento IFC #${expressId}: a carregar propriedades…`;
+    try {
+      const element = await getIfcElementInfo(project.id, expressId);
+      if (disposed || version !== selectionVersion) return;
+      renderElementInfo(infoBox, element);
+      positionInfoBox(event, infoBox);
+    } catch (error) {
+      if (disposed || version !== selectionVersion) return;
+      console.error("Não foi possível carregar as propriedades IFC:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      infoBox.textContent = `Elemento IFC #${expressId}. Não foi possível carregar as propriedades: ${message}`;
+      positionInfoBox(event, infoBox);
+    }
   }
 
   function onModelLoad() {
@@ -256,7 +282,7 @@ function createProjectPopup(project, navigate) {
   if (!project.modelUrl) {
     const unavailable = document.createElement("p");
     unavailable.textContent =
-      "Sem modelo de demonstração associado; a conversão IFC ainda não está disponível.";
+      "Este projeto ainda não tem um modelo 3D disponível neste navegador.";
     popup.append(unavailable);
     return popup;
   }
@@ -269,6 +295,12 @@ function createProjectPopup(project, navigate) {
     option.textContent = modeLabel(mode);
     modeSelect.append(option);
   });
+  if (project.localModel) {
+    const arNotice = document.createElement("p");
+    arNotice.textContent =
+      "No Android, modelos guardados neste navegador não podem ser abertos no Scene Viewer. Use WebXR.";
+    popup.append(arNotice);
+  }
   const viewButton = document.createElement("button");
   viewButton.type = "button";
   viewButton.className = "primary-button";
@@ -280,6 +312,52 @@ function createProjectPopup(project, navigate) {
   });
   popup.append(modeSelect, viewButton);
   return popup;
+}
+
+function renderElementInfo(container, element) {
+  container.replaceChildren();
+  const heading = document.createElement("strong");
+  heading.textContent = `${element.type || "Elemento IFC"} #${element.expressId}`;
+  container.append(heading);
+
+  const attributes = element.attributes;
+  if (attributes.length > 0) {
+    const section = document.createElement("section");
+    const title = document.createElement("strong");
+    title.textContent = "Atributos IFC";
+    section.append(title);
+    const list = document.createElement("ul");
+    for (const attribute of attributes) {
+      const item = document.createElement("li");
+      item.textContent = `${attribute.name}: ${formatPropertyValue(attribute.value)}`;
+      list.append(item);
+    }
+    section.append(list);
+    container.append(section);
+  }
+
+  for (const set of [...element.propertySets, ...element.quantitySets]) {
+    if (!set.properties && !set.quantities) continue;
+    const section = document.createElement("section");
+    const title = document.createElement("strong");
+    title.textContent = set.name;
+    section.append(title);
+    const list = document.createElement("ul");
+    for (const property of set.properties || set.quantities) {
+      const item = document.createElement("li");
+      const unit = property.unit ? ` ${property.unit}` : "";
+      item.textContent = `${property.name}: ${formatPropertyValue(property.value)}${unit}`;
+      list.append(item);
+    }
+    section.append(list);
+    container.append(section);
+  }
+}
+
+function formatPropertyValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function modeLabel(mode) {

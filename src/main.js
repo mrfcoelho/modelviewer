@@ -19,7 +19,7 @@ function navigate(hash) {
   }
 }
 
-function renderStatus(message, retry) {
+function renderStatus(message, retry, retryLabel = "Tentar novamente") {
   cleanupExploreView();
   const container = document.createElement("main");
   container.className = "startup-status";
@@ -31,7 +31,7 @@ function renderStatus(message, retry) {
   if (retry) {
     const retryButton = document.createElement("button");
     retryButton.type = "button";
-    retryButton.textContent = "Tentar novamente";
+    retryButton.textContent = retryLabel;
     retryButton.addEventListener("click", retry);
     container.append(retryButton);
   }
@@ -78,7 +78,7 @@ async function router() {
     try {
       const { renderSubmission } = await import("./views/submission.js");
       if (version !== navigationVersion) return;
-      await renderSubmission(app, projects, navigate, (project) => {
+      await renderSubmission(app, navigate, (project) => {
         projects = [...projects, project];
       });
     } catch (error) {
@@ -92,11 +92,23 @@ async function router() {
     return;
   }
 
-  const arRoute = route.match(/^#\/ar\/([A-Za-z0-9-]+)-([a-z-]+)$/);
-  if (arRoute && arModes.includes(arRoute[2])) {
-    const project = projects.find(({ id }) => id === arRoute[1]);
+  const arRoute = route.match(/^#\/ar\/([A-Za-z0-9-]+)$/);
+  const arMode = arRoute
+    ? arModes.find((mode) => arRoute[1].endsWith(`-${mode}`))
+    : null;
+  if (arRoute && arMode) {
+    const projectId = arRoute[1].slice(0, -(arMode.length + 1));
+    const project = projects.find(({ id }) => id === projectId);
     if (!project || !project.modelUrl) {
       renderNotFound();
+      return;
+    }
+    if (project.localModel && arMode === "scene-viewer") {
+      renderStatus(
+        "O Scene Viewer não consegue abrir modelos guardados localmente. Escolha WebXR ou Quick Look.",
+        () => navigate("#/explorar"),
+        "Voltar ao mapa",
+      );
       return;
     }
 
@@ -104,7 +116,7 @@ async function router() {
     try {
       exploreView = await import("./views/explore.js");
       if (version !== navigationVersion) return;
-      await exploreView.renderAR(app, project, arRoute[2], navigate);
+      await exploreView.renderAR(app, project, arMode, navigate);
     } catch (error) {
       if (version !== navigationVersion) return;
       console.error("Não foi possível abrir o modelo 3D:", error);
