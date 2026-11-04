@@ -1,6 +1,5 @@
 import * as L from "leaflet";
 import "@google/model-viewer";
-import * as THREE from "three";
 import "./main.css";
 
 const app = document.getElementById("app");
@@ -11,6 +10,7 @@ let locations = [];
 let mapCenter = null;
 let mapZoom = null;
 let cleanupARView = null;
+let hasRouterListener = false;
 
 async function fetchModelData() {
   const res = await fetch("models.json");
@@ -150,82 +150,84 @@ function renderARView(id, arMode) {
   modelViewer.setAttribute("src", loc.modelUrl);
   modelViewer.setAttribute("alt", `3D model of ${loc.name}`);
 
+  const modelStatus = document.createElement("div");
+  modelStatus.className = "model-status";
+  modelStatus.setAttribute("role", "status");
+  modelStatus.setAttribute("aria-live", "polite");
+  modelStatus.textContent = "Loading 3D model…";
+
   const infoBox = document.createElement("div");
   infoBox.id = "infoBox";
 
-  arView.append(backButton, modelViewer);
+  arView.append(backButton, modelViewer, modelStatus);
   app.replaceChildren(arView, infoBox);
 
-  const raycaster = new THREE.Raycaster();
-  const touch = new THREE.Vector2();
-  let threeScene = null;
-  let selectedMesh = null;
-  let originalMaterial = null;
-  let highlightMaterial = null;
+  let selectedMaterial = null;
+  let originalEmissiveFactor = null;
+
+  function setModelStatus(message, showRetry = false) {
+    modelStatus.replaceChildren();
+    modelStatus.hidden = !message;
+    if (!message) return;
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    modelStatus.append(text);
+
+    if (showRetry) {
+      const retryButton = document.createElement("button");
+      retryButton.type = "button";
+      retryButton.textContent = "Try again";
+      retryButton.addEventListener("click", () => renderARView(id, arMode));
+      modelStatus.append(retryButton);
+    }
+  }
 
   function clearSelection() {
-    if (selectedMesh) {
-      selectedMesh.material = originalMaterial;
-      if (Array.isArray(highlightMaterial)) {
-        highlightMaterial.forEach((material) => material.dispose());
-      } else if (highlightMaterial) {
-        highlightMaterial.dispose();
-      }
-      selectedMesh = null;
-      originalMaterial = null;
-      highlightMaterial = null;
+    if (selectedMaterial) {
+      selectedMaterial.setEmissiveFactor(originalEmissiveFactor);
+      selectedMaterial = null;
+      originalEmissiveFactor = null;
     }
     infoBox.style.display = "none";
   }
 
   function pickObjects(event) {
-    if (!threeScene || !threeScene.camera) return;
-
-    const rect = modelViewer.getBoundingClientRect();
-    touch.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    touch.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(touch, threeScene.camera);
-
-    const intersects = raycaster.intersectObjects(threeScene.children, true);
-    const object = intersects[0] && intersects[0].object;
-    if (!object || !object.isMesh || !object.material) {
+    const material = modelViewer.materialFromPoint(event.clientX, event.clientY);
+    if (!material) {
       clearSelection();
       return;
     }
 
     clearSelection();
-    selectedMesh = object;
-    originalMaterial = object.material;
-    const createHighlight = (material) => {
-      const highlighted = material.clone();
-      if (highlighted.color) highlighted.color.set(0xff4444);
-      return highlighted;
-    };
-    highlightMaterial = Array.isArray(originalMaterial)
-      ? originalMaterial.map(createHighlight)
-      : createHighlight(originalMaterial);
-    object.material = highlightMaterial;
+    selectedMaterial = material;
+    originalEmissiveFactor = [...material.emissiveFactor];
+    material.setEmissiveFactor([1, 0, 0]);
 
-    infoBox.textContent = `Name: ${object.name || "(unnamed)"}`;
+    infoBox.textContent = `Material: ${material.name || "(unnamed)"}`;
     infoBox.style.display = "block";
     positionInfoBox(event, infoBox);
   }
 
   function onModelLoad() {
-    const sceneSymbol = Object.getOwnPropertySymbols(modelViewer).find(
-      (symbol) => symbol.description === "scene",
-    );
-    if (!sceneSymbol) {
-      console.warn("Unable to access the model-viewer scene for object selection");
-      return;
-    }
-    threeScene = modelViewer[sceneSymbol];
-    modelViewer.addEventListener("click", pickObjects);
+    setModelStatus("");
   }
 
-  modelViewer.addEventListener("load", onModelLoad, { once: true });
+  function onModelError(event) {
+    console.error("Failed to load 3D model:", event.detail?.sourceError || event.detail);
+    clearSelection();
+    setModelStatus(
+      "Could not load this 3D model. Check your connection and try again.",
+      true,
+    );
+  }
+
+  modelViewer.addEventListener("load", onModelLoad);
+  modelViewer.addEventListener("error", onModelError);
+  modelViewer.addEventListener("click", pickObjects);
   cleanupARView = () => {
     modelViewer.removeEventListener("load", onModelLoad);
+    modelViewer.removeEventListener("error", onModelError);
     modelViewer.removeEventListener("click", pickObjects);
     clearSelection();
     cleanupARView = null;
@@ -312,6 +314,26 @@ function renderNotFound() {
   app.replaceChildren(container);
 }
 
+function renderStartupStatus(message, retry) {
+  const container = document.createElement("main");
+  container.className = "startup-status";
+  container.setAttribute("role", "status");
+
+  const text = document.createElement("p");
+  text.textContent = message;
+  container.append(text);
+
+  if (retry) {
+    const retryButton = document.createElement("button");
+    retryButton.type = "button";
+    retryButton.textContent = "Try again";
+    retryButton.addEventListener("click", retry);
+    container.append(retryButton);
+  }
+
+  app.replaceChildren(container);
+}
+
 function router() {
   const hash = location.hash || "#";
   const match = hash.match(/^#\/ar\/(\d+)-([a-z-]+)$/);
@@ -326,13 +348,21 @@ function router() {
 }
 
 async function init() {
+  renderStartupStatus("Loading model locations…");
+
   try {
     locations = await fetchModelData();
     router(); // render initial view
-    window.addEventListener("hashchange", router);
+    if (!hasRouterListener) {
+      window.addEventListener("hashchange", router);
+      hasRouterListener = true;
+    }
   } catch (err) {
-    console.error(err);
-    renderNotFound();
+    console.error("Failed to load model locations:", err);
+    renderStartupStatus(
+      "Could not load model locations. Check your connection and try again.",
+      init,
+    );
   }
 }
 
