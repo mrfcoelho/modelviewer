@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Run tests
+        run: npm test
+
       - name: Build production site
         if: github.event_name == 'push'
         run: npm run build
