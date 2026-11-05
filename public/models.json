@@ -1,44 +1,113 @@
 [
   {
     "id": "1",
-    "name": "CCG",
+    "name": "Centro de Computação Gráfica",
+    "responsible": "CCG/zgdv Institute",
+    "status": "approved",
     "coords": [41.45330011034379, -8.28837129166596],
-    "modelUrl": "models/ccg.glb"
-  },
-  {
-    "id": "2",
-    "name": "Moradia T0",
-    "coords": [41.453074955940195, -8.288819220548435],
-    "modelUrl": "models/model.glb"
-  },
-  {
-    "id": "3",
-    "name": "Arranjo Exterior",
-    "coords": [41.453862226928145, -8.28819307681173],
-    "modelUrl": "models/exterior.glb"
-  },
-  {
-    "id": "4",
-    "name": "Escola Interior",
-    "coords": [41.452694398074215, -8.288004847041949],
-    "modelUrl": "models/estrutura_interior.glb"
-  },
-  {
-    "id": "5",
-    "name": "Escola Estrutura",
-    "coords": [41.452646443035235, -8.288949529300472],
-    "modelUrl": "models/estrutura.glb"
+    "modelUrl": "models/ccg.glb",
+    "ifcUrl": "models/ccg.ifc",
+    "floorModels": [
+      {
+        "key": "floor-0",
+        "name": "Piso1",
+        "elevation": 0,
+        "modelUrl": "models/ccg.glb"
+      },
+      {
+        "key": "floor-1",
+        "name": "TetoPiso1",
+        "elevation": 2.5999999046325684,
+        "modelUrl": "models/ccg-from-floor-1.glb"
+      },
+      {
+        "key": "floor-2",
+        "name": "Piso2",
+        "elevation": 3,
+        "modelUrl": "models/ccg-from-floor-2.glb"
+      },
+      {
+        "key": "floor-3",
+        "name": "Cobertura",
+        "elevation": 9,
+        "modelUrl": "models/ccg-from-floor-3.glb"
+      }
+    ]
   },
   {
     "id": "6",
-    "name": "Café",
+    "name": "Café Universitário",
+    "responsible": "Universidade do Minho",
+    "description": "Café de apoio à Escola de Ciências da Universidade do Minho",
+    "status": "submitted",
     "coords": [41.4526464430352, -8.2899495293004],
-    "modelUrl": "models/cafe.glb"
+    "modelUrl": "models/cafe.glb",
+    "ifcUrl": "models/cafe.ifc",
+    "floorModels": [
+      {
+        "key": "floor-0",
+        "name": "Nivel 1",
+        "elevation": 0,
+        "modelUrl": "models/cafe.glb"
+      },
+      {
+        "key": "floor-1",
+        "name": "Nivel 2",
+        "elevation": 3,
+        "modelUrl": "models/cafe-from-floor-1.glb"
+      }
+    ]
   },
   {
-    "id": "7",
-    "name": "Moradia T4",
-    "coords": [41.4526464430352, -8.2886495293004],
-    "modelUrl": "models/house.glb"
+    "id": "newton",
+    "name": "Edifício Newton - Fernão de Magalhães 2345",
+    "status": "submitted",
+    "coords": [41.45477215847341, -8.289049649868444],
+    "modelUrl": "models/newton.glb",
+    "ifcUrl": "models/newton.ifc",
+    "floorModels": [
+      {
+        "key": "floor-0",
+        "name": "Piso -1 - Cave e Plantas Técnicas",
+        "elevation": -3.2,
+        "modelUrl": "models/newton.glb"
+      },
+      {
+        "key": "floor-1",
+        "name": "Piso 0 - Rés-do-Chão / Receção 2345-2351",
+        "elevation": 0,
+        "modelUrl": "models/newton-from-floor-1.glb"
+      },
+      {
+        "key": "floor-2",
+        "name": "Piso 1 - Engenharia de Estruturas",
+        "elevation": 3.6,
+        "modelUrl": "models/newton-from-floor-2.glb"
+      },
+      {
+        "key": "floor-3",
+        "name": "Piso 2 - Laboratório BIM e Coordenação",
+        "elevation": 7,
+        "modelUrl": "models/newton-from-floor-3.glb"
+      },
+      {
+        "key": "floor-4",
+        "name": "Piso 3 - Arquitetura e Engenharia MEP",
+        "elevation": 10.4,
+        "modelUrl": "models/newton-from-floor-4.glb"
+      },
+      {
+        "key": "floor-5",
+        "name": "Piso 4 - Direção e buildingSMART Portugal",
+        "elevation": 13.8,
+        "modelUrl": "models/newton-from-floor-5.glb"
+      },
+      {
+        "key": "floor-6",
+        "name": "Piso 5 - Cobertura, Sala Panorâmica e Terraço",
+        "elevation": 17.2,
+        "modelUrl": "models/newton-from-floor-6.glb"
+      }
+    ]
   }
 ]
