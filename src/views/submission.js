@@ -17,21 +17,27 @@ export async function renderSubmission(app, navigate, onSubmitted) {
   const introduction = document.createElement("p");
   introduction.className = "intro";
   introduction.textContent =
-    "O IFC é convertido em GLB neste navegador. O ficheiro e os dados da submissão não são enviados para um backend nem sincronizados; o mapa utiliza tiles do OpenStreetMap.";
+    "O IFC e os dados da submissão ficam associados ao processo de licenciamento";
   content.append(heading, introduction);
 
   const form = document.createElement("form");
   form.className = "project-form";
+  const fileField = document.createElement("div");
+  fileField.className = "form-field";
+  const fileLabel = document.createElement("label");
+  fileLabel.htmlFor = "ifc-file";
+  fileLabel.textContent = "Ficheiro IFC";
   const fileInput = document.createElement("input");
   fileInput.type = "file";
+  fileInput.id = "ifc-file";
+  fileInput.className = "visually-hidden-file-input";
   fileInput.accept = ".ifc,application/octet-stream";
   fileInput.required = true;
-  fileInput.setAttribute("aria-describedby", "file-help selected-file");
-
-  const fileHelp = document.createElement("small");
-  fileHelp.id = "file-help";
-  fileHelp.textContent =
-    "O ficheiro original e o modelo convertido ficam guardados neste navegador.";
+  fileInput.setAttribute("aria-describedby", "selected-file");
+  const chooseFile = document.createElement("label");
+  chooseFile.className = "primary-button file-picker-button";
+  chooseFile.htmlFor = fileInput.id;
+  chooseFile.textContent = "Escolher ficheiro";
   const selectedFile = document.createElement("p");
   selectedFile.id = "selected-file";
   selectedFile.className = "selected-file";
@@ -41,11 +47,8 @@ export async function renderSubmission(app, navigate, onSubmitted) {
       ? `Ficheiro selecionado: ${fileInput.files[0].name}`
       : "";
   });
-  form.append(
-    createField("Ficheiro IFC", fileInput),
-    fileHelp,
-    selectedFile,
-  );
+  fileField.append(fileLabel, fileInput, chooseFile, selectedFile);
+  form.append(fileField);
 
   const nameInput = createInput("text", "project-name");
   nameInput.required = true;
@@ -100,7 +103,7 @@ export async function renderSubmission(app, navigate, onSubmitted) {
   const submitButton = document.createElement("button");
   submitButton.className = "primary-button";
   submitButton.type = "submit";
-  submitButton.textContent = "Converter e guardar projeto";
+  submitButton.textContent = "Submeter projeto";
   form.append(draftStatus, feedback, submitButton);
   content.append(form);
   page.append(content);
@@ -160,19 +163,16 @@ export async function renderSubmission(app, navigate, onSubmitted) {
     try {
       feedback.textContent = "A carregar o processador IFC…";
       const { processIfcFile } = await import("../services/ifc-processing.js");
-      const { modelBlob, elementCount } = await processIfcFile(
-        file,
-        (message) => {
-          feedback.textContent = message;
-        },
-      );
+      const { modelBlob } = await processIfcFile(file, (message) => {
+        feedback.textContent = message;
+      });
       if (!form.isConnected) return;
 
       feedback.textContent = "A guardar o projeto neste navegador…";
       const savedProject = await saveLocalProject(project, modelBlob, file);
       onSubmitted(savedProject);
       if (!form.isConnected) return;
-      renderConfirmation(app, savedProject, navigate, elementCount);
+      renderConfirmation(app, savedProject, navigate);
     } catch (error) {
       console.error("Não foi possível processar ou guardar o projeto:", error);
       const message = error instanceof Error ? error.message : String(error);
@@ -222,18 +222,31 @@ function createInput(type, name) {
   return input;
 }
 
-function renderConfirmation(app, project, navigate, elementCount) {
+function renderConfirmation(app, project, navigate) {
   const confirmation = document.createElement("main");
   confirmation.className = "confirmation-page";
   const card = document.createElement("section");
   card.className = "confirmation-card";
   const heading = document.createElement("h1");
   heading.textContent = "Projeto submetido";
-  const name = document.createElement("p");
-  name.textContent = project.name;
-  const detail = document.createElement("p");
-  detail.textContent =
-    `Modelo 3D gerado com ${elementCount} elementos IFC. O projeto está disponível no mapa e guardado apenas neste navegador; não foi enviado para um backend.`;
+  const summary = document.createElement("div");
+  summary.className = "confirmation-summary";
+  const fields = [
+    ["Ficheiro IFC", project.fileName],
+    ["Nome do projeto", project.name],
+    ["Entidade responsável", project.responsible],
+    ["Descrição", project.description],
+    [
+      "Localização (Lat;Lon)",
+      `(${project.coords[0].toFixed(2)};${project.coords[1].toFixed(2)})`,
+    ],
+  ];
+  for (const [label, value] of fields) {
+    if (!value) continue;
+    const field = document.createElement("p");
+    field.textContent = `${label}: ${value}`;
+    summary.append(field);
+  }
   const exploreButton = document.createElement("button");
   exploreButton.className = "primary-button";
   exploreButton.type = "button";
@@ -246,7 +259,7 @@ function renderConfirmation(app, project, navigate, elementCount) {
     event.preventDefault();
     navigate("#/");
   });
-  card.append(heading, name, detail, exploreButton, homeLink);
+  card.append(heading, summary, exploreButton, homeLink);
   confirmation.append(card);
   app.replaceChildren(confirmation);
 }

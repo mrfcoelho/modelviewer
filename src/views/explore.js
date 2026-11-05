@@ -1,6 +1,9 @@
 import "leaflet/dist/leaflet.css";
 import { getModelUrl } from "../services/project-data.js";
 import { getIfcElementInfo } from "../services/ifc-properties.js";
+import markerIcon2xUrl from "leaflet/dist/images/marker-icon-2x.png";
+import markerIconUrl from "leaflet/dist/images/marker-icon.png";
+import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 const arModes = ["webxr", "scene-viewer", "quick-look"];
 let leafletMap = null;
@@ -33,7 +36,7 @@ export async function renderExplore(app, projects, navigate) {
 
   const page = document.createElement("main");
   page.className = "explore-page";
-  const header = createPageHeader("Explorar projetos", navigate);
+  const header = createPageHeader(navigate);
   const mapElement = document.createElement("div");
   mapElement.id = "map";
   mapElement.setAttribute("aria-label", "Mapa dos projetos de construção");
@@ -50,7 +53,9 @@ export async function renderExplore(app, projects, navigate) {
   );
 
   projects.forEach((project) => {
-    const marker = L.marker(project.coords).addTo(leafletMap);
+    const marker = L.marker(project.coords, {
+      icon: createMarkerIcon(L),
+    }).addTo(leafletMap);
     marker.bindPopup(createProjectPopup(project, navigate));
   });
 
@@ -235,7 +240,7 @@ export async function renderAR(app, project, arMode, navigate) {
   await loadModelViewer();
 }
 
-function createPageHeader(title, navigate) {
+function createPageHeader(navigate) {
   const header = document.createElement("header");
   header.className = "site-header page-header";
   const brand = document.createElement("a");
@@ -246,38 +251,42 @@ function createPageHeader(title, navigate) {
     event.preventDefault();
     navigate("#/");
   });
-  const heading = document.createElement("h1");
-  heading.textContent = title;
-  header.append(brand, heading);
+  const homeLink = document.createElement("a");
+  homeLink.className = "secondary-link";
+  homeLink.href = "#/";
+  homeLink.textContent = "Página inicial";
+  homeLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    navigate("#/");
+  });
+  header.append(brand, homeLink);
   return header;
 }
 
 function createProjectPopup(project, navigate) {
   const popup = document.createElement("article");
   popup.className = "project-popup";
-  const heading = document.createElement("h2");
-  heading.textContent = project.name;
-
   const status = document.createElement("span");
   status.className = `status-badge status-${project.status}`;
   status.textContent = statusLabels[project.status];
-  popup.append(heading, status);
+  popup.append(status);
 
-  if (project.description) {
-    const description = document.createElement("p");
-    description.textContent = project.description;
-    popup.append(description);
+  appendProjectDetail(popup, "Nome do projeto", project.name);
+  appendProjectDetail(popup, "Entidade responsável", project.responsible);
+  appendProjectDetail(popup, "Descrição", project.description);
+
+  const modeHelp = document.createElement("div");
+  modeHelp.className = "ar-mode-help";
+  for (const description of [
+    "WebXR: qualquer dispositivo",
+    "Scene Viewer: dispositivos Android",
+    "Quick Look: dispositivos iOS",
+  ]) {
+    const line = document.createElement("p");
+    line.textContent = description;
+    modeHelp.append(line);
   }
-  if (project.responsible) {
-    const responsible = document.createElement("p");
-    responsible.textContent = `Entidade responsável: ${project.responsible}`;
-    popup.append(responsible);
-  }
-  if (project.fileName) {
-    const file = document.createElement("p");
-    file.textContent = `Ficheiro submetido: ${project.fileName}`;
-    popup.append(file);
-  }
+  popup.append(modeHelp);
 
   if (!project.modelUrl) {
     const unavailable = document.createElement("p");
@@ -312,6 +321,26 @@ function createProjectPopup(project, navigate) {
   });
   popup.append(modeSelect, viewButton);
   return popup;
+}
+
+function appendProjectDetail(container, label, value) {
+  if (!value) return;
+  const detail = document.createElement("p");
+  detail.textContent = `${label}: ${value}`;
+  container.append(detail);
+}
+
+function createMarkerIcon(L) {
+  return L.icon({
+    iconRetinaUrl: markerIcon2xUrl,
+    iconUrl: markerIconUrl,
+    shadowUrl: markerShadowUrl,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
+    shadowSize: [41, 41],
+  });
 }
 
 function renderElementInfo(container, element) {
@@ -377,7 +406,7 @@ function locateUser(L, controlButton) {
 
   leafletMap.once("locationfound", (event) => {
     if (!leafletMap) return;
-    L.marker(event.latlng)
+    L.marker(event.latlng, { icon: createMarkerIcon(L) })
       .addTo(leafletMap)
       .bindPopup("Está aqui")
       .openPopup();

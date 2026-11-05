@@ -146,10 +146,11 @@ html {
 }
 
 .home-content h1 {
-  max-width: 700px;
+  max-width: none;
   margin: 0.5rem 0;
   color: #102a43;
   font-size: clamp(2.5rem, 7vw, 4.5rem);
+  white-space: nowrap;
 }
 
 .intro {
@@ -244,14 +245,19 @@ html {
   max-width: 300px;
 }
 
-.project-popup h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.1rem;
-}
-
 .project-popup p {
   margin: 0.6rem 0;
   line-height: 1.4;
+}
+
+.project-popup .ar-mode-help {
+  margin: 0.75rem 0;
+  color: #52606d;
+  font-size: 0.8rem;
+}
+
+.project-popup .ar-mode-help p {
+  margin: 0.2rem 0;
 }
 
 .project-popup select {
@@ -348,6 +354,27 @@ html {
   resize: vertical;
 }
 
+.form-field .visually-hidden-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.file-picker-button {
+  width: fit-content;
+}
+
+.visually-hidden-file-input:focus-visible + .file-picker-button {
+  outline: 3px solid #287d6a;
+  outline-offset: 3px;
+}
+
 .project-form small,
 .selected-file {
   color: #52606d;
@@ -403,6 +430,16 @@ html {
   color: #176b58;
 }
 
+.confirmation-summary {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.confirmation-summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 canvas {
   display: block;
 }
@@ -432,6 +469,10 @@ model-viewer {
 
 /* Responsive button on mobile */
 @media (max-width: 600px) {
+  .home-content h1 {
+    white-space: normal;
+  }
+
   .home-choices {
     grid-template-columns: 1fr;
   }
