@@ -3,6 +3,7 @@ const DATABASE_VERSION = 1;
 const PROJECTS_STORE = "projects";
 const projectStatuses = ["draft", "submitted", "approved"];
 const localModelUrls = new Map();
+const localFloorModelUrls = new Map();
 
 export function validateProjects(data) {
   if (!Array.isArray(data)) {
@@ -11,6 +12,10 @@ export function validateProjects(data) {
 
   const ids = new Set();
   return data.map((project, index) => {
+    const floorModels =
+      project?.floorModels === undefined
+        ? undefined
+        : normalizeFloorModels(project.floorModels);
     if (
       !project ||
       typeof project.id !== "string" ||
@@ -35,6 +40,7 @@ export function validateProjects(data) {
         (typeof project.ifcUrl !== "string" ||
           !/^models\/[A-Za-z0-9._/-]+\.ifc$/i.test(project.ifcUrl) ||
           project.ifcUrl.split("/").includes(".."))) ||
+      (project.floorModels !== undefined && !floorModels) ||
       ["description", "responsible", "fileName"].some(
         (field) =>
           project[field] !== undefined && typeof project[field] !== "string",
@@ -53,9 +59,40 @@ export function validateProjects(data) {
       coords: [...project.coords],
       modelUrl: project.modelUrl,
       ...(project.ifcUrl ? { ifcUrl: project.ifcUrl } : {}),
+      ...(floorModels ? { floorModels } : {}),
       ...(project.fileName ? { fileName: project.fileName } : {}),
     };
   });
+}
+
+function normalizeFloorModels(floorModels) {
+  if (!Array.isArray(floorModels)) return null;
+  const keys = new Set();
+  const normalized = [];
+  for (const floor of floorModels) {
+    if (
+      !floor ||
+      typeof floor.key !== "string" ||
+      !/^[A-Za-z0-9-]+$/.test(floor.key) ||
+      keys.has(floor.key) ||
+      typeof floor.name !== "string" ||
+      !floor.name.trim() ||
+      !(floor.elevation === null || Number.isFinite(floor.elevation)) ||
+      typeof floor.modelUrl !== "string" ||
+      !/^models\/[A-Za-z0-9._/-]+\.glb$/i.test(floor.modelUrl) ||
+      floor.modelUrl.split("/").includes("..")
+    ) {
+      return null;
+    }
+    keys.add(floor.key);
+    normalized.push({
+      key: floor.key,
+      name: floor.name.trim(),
+      elevation: floor.elevation,
+      modelUrl: floor.modelUrl,
+    });
+  }
+  return normalized;
 }
 
 export function getModelUrl(modelPath) {
@@ -89,7 +126,7 @@ export async function loadProjects() {
 
 export async function loadLocalProjects() {
   const records = await readAllLocalRecords();
-  return records.map(({ project, modelBlob }) => {
+  return records.map(({ project, modelBlob, floorModels = [] }) => {
     const [validatedProject] = validateProjects([project]);
     return {
       ...validatedProject,
@@ -97,11 +134,22 @@ export async function loadLocalProjects() {
       modelUrl: modelBlob
         ? getOrCreateModelUrl(validatedProject.id, modelBlob)
         : null,
+      floorModels: floorModels.map(({ key, name, elevation, modelBlob }) => ({
+        key,
+        name,
+        elevation,
+        modelUrl: getOrCreateFloorModelUrl(validatedProject.id, key, modelBlob),
+      })),
     };
   });
 }
 
-export async function saveLocalProject(project, modelBlob, ifcBlob) {
+export async function saveLocalProject(
+  project,
+  modelBlob,
+  ifcBlob,
+  floorModels = [],
+) {
   const [validatedProject] = validateProjects([project]);
   if (!(modelBlob instanceof Blob) || modelBlob.size === 0) {
     throw new Error("O modelo GLB convertido não é válido.");
@@ -109,12 +157,37 @@ export async function saveLocalProject(project, modelBlob, ifcBlob) {
   if (!(ifcBlob instanceof Blob) || ifcBlob.size === 0) {
     throw new Error("O ficheiro IFC original não é válido.");
   }
+  if (
+    !Array.isArray(floorModels) ||
+    floorModels.some(
+      (floor) =>
+        !floor ||
+        typeof floor.key !== "string" ||
+        !/^[A-Za-z0-9-]+$/.test(floor.key) ||
+        typeof floor.name !== "string" ||
+        !floor.name.trim() ||
+        !(floor.elevation === null || Number.isFinite(floor.elevation)) ||
+        !(floor.modelBlob instanceof Blob) ||
+        floor.modelBlob.size === 0,
+    ) ||
+    new Set(floorModels.map(({ key }) => key)).size !== floorModels.length
+  ) {
+    throw new Error("Os modelos GLB dos pisos não são válidos.");
+  }
 
   const record = {
     id: validatedProject.id,
     project: validatedProject,
     modelBlob,
     ifcBlob,
+    floorModels: floorModels.map(
+      ({ key, name, elevation, modelBlob: floorModelBlob }) => ({
+        key,
+        name: name.trim(),
+        elevation,
+        modelBlob: floorModelBlob,
+      }),
+    ),
   };
 
   try {
@@ -132,6 +205,12 @@ export async function saveLocalProject(project, modelBlob, ifcBlob) {
     ...validatedProject,
     localModel: true,
     modelUrl: getOrCreateModelUrl(validatedProject.id, modelBlob),
+    floorModels: record.floorModels.map(({ key, name, elevation, modelBlob }) => ({
+      key,
+      name,
+      elevation,
+      modelUrl: getOrCreateFloorModelUrl(validatedProject.id, key, modelBlob),
+    })),
   };
 }
 
@@ -240,4 +319,12 @@ function getOrCreateModelUrl(projectId, modelBlob) {
     localModelUrls.set(projectId, URL.createObjectURL(modelBlob));
   }
   return localModelUrls.get(projectId);
+}
+
+function getOrCreateFloorModelUrl(projectId, key, modelBlob) {
+  const urlKey = `${projectId}:${key}`;
+  if (!localFloorModelUrls.has(urlKey)) {
+    localFloorModelUrls.set(urlKey, URL.createObjectURL(modelBlob));
+  }
+  return localFloorModelUrls.get(urlKey);
 }

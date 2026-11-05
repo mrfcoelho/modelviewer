@@ -163,13 +163,21 @@ export async function renderSubmission(app, navigate, onSubmitted) {
     try {
       feedback.textContent = "A carregar o processador IFC…";
       const { processIfcFile } = await import("../services/ifc-processing.js");
-      const { modelBlob } = await processIfcFile(file, (message) => {
-        feedback.textContent = message;
-      });
+      const { modelBlob, floorModels } = await processIfcFile(
+        file,
+        (message) => {
+          feedback.textContent = message;
+        },
+      );
       if (!form.isConnected) return;
 
       feedback.textContent = "A guardar o projeto neste navegador…";
-      const savedProject = await saveLocalProject(project, modelBlob, file);
+      const savedProject = await saveLocalProject(
+        project,
+        modelBlob,
+        file,
+        floorModels,
+      );
       onSubmitted(savedProject);
       if (!form.isConnected) return;
       renderConfirmation(app, savedProject, navigate);

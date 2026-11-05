@@ -92,14 +92,23 @@ async function router() {
     return;
   }
 
-  const arRoute = route.match(/^#\/ar\/([A-Za-z0-9-]+)$/);
+  const arRoute = route.match(
+    /^#\/ar\/([A-Za-z0-9-]+)(?:\?floor=([A-Za-z0-9-]+))?$/,
+  );
   const arMode = arRoute
     ? arModes.find((mode) => arRoute[1].endsWith(`-${mode}`))
     : null;
   if (arRoute && arMode) {
     const projectId = arRoute[1].slice(0, -(arMode.length + 1));
     const project = projects.find(({ id }) => id === projectId);
-    if (!project || !project.modelUrl) {
+    const floorModel = arRoute[2]
+      ? project?.floorModels?.find(({ key }) => key === arRoute[2])
+      : null;
+    if (
+      !project ||
+      (!floorModel && arRoute[2]) ||
+      !(floorModel?.modelUrl || project.modelUrl)
+    ) {
       renderNotFound();
       return;
     }
@@ -116,7 +125,20 @@ async function router() {
     try {
       exploreView = await import("./views/explore.js");
       if (version !== navigationVersion) return;
-      await exploreView.renderAR(app, project, arMode, navigate);
+      const selectedProject = floorModel
+        ? {
+            ...project,
+            modelUrl: floorModel.modelUrl,
+            selectedFloor: floorModel.name,
+          }
+        : project;
+      await exploreView.renderAR(
+        app,
+        selectedProject,
+        arMode,
+        navigate,
+        floorModel?.key,
+      );
     } catch (error) {
       if (version !== navigationVersion) return;
       console.error("Não foi possível abrir o modelo 3D:", error);

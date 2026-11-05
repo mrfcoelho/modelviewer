@@ -14,6 +14,9 @@ export async function processIfcFile(file, onProgress = () => {}) {
   const buffer = new Uint8Array(await file.arrayBuffer());
   onProgress("A iniciar o processador IFC…");
 
+  const { IfcParser } = await import("@ifc-lite/parser");
+  const ifcStore = await new IfcParser().parseColumnar(buffer);
+
   const processor = new GeometryProcessor({ enableInstancing: false });
   await processor.init();
 
@@ -36,16 +39,104 @@ export async function processIfcFile(file, onProgress = () => {}) {
   }
 
   onProgress("A preparar o modelo 3D…");
-  const scene = createScene(meshes);
-  const glb = await new GLTFExporter().parseAsync(scene, { binary: true });
-  if (!(glb instanceof ArrayBuffer) || glb.byteLength === 0) {
-    throw new Error("Não foi possível gerar o modelo GLB.");
+  const modelBlob = await exportGlb(meshes);
+  const floorMeshes = getFloorMeshSets(meshes, ifcStore);
+  const floorModels = [];
+  for (const floor of floorMeshes) {
+    onProgress(`A preparar o modelo a partir de ${floor.name}…`);
+    floorModels.push({
+      key: floor.key,
+      name: floor.name,
+      elevation: floor.elevation,
+      modelBlob:
+        floor.meshes.length === meshes.length
+          ? modelBlob
+          : await exportGlb(floor.meshes),
+    });
   }
 
   return {
-    modelBlob: new Blob([glb], { type: "model/gltf-binary" }),
+    modelBlob,
+    floorModels,
     elementCount: new Set(meshes.map(({ expressId }) => expressId)).size,
   };
+}
+
+async function exportGlb(meshes) {
+  const glb = await new GLTFExporter().parseAsync(createScene(meshes), {
+    binary: true,
+  });
+  if (!(glb instanceof ArrayBuffer) || glb.byteLength === 0) {
+    throw new Error("Não foi possível gerar o modelo GLB.");
+  }
+  return new Blob([glb], { type: "model/gltf-binary" });
+}
+
+export function getFloorMeshSets(meshes, ifcStore) {
+  const hierarchy = ifcStore.spatialHierarchy;
+  if (!hierarchy?.byStorey?.size) return [];
+
+  const elementToStorey = new Map(hierarchy.elementToStorey);
+  for (const relationship of ifcStore.getEntitiesByType("IfcRelVoidsElement")) {
+    const hostId = relationship.attributes[4];
+    const openingId = relationship.attributes[5];
+    const storeyId = elementToStorey.get(hostId);
+    if (storeyId !== undefined && !elementToStorey.has(openingId)) {
+      elementToStorey.set(openingId, storeyId);
+    }
+  }
+
+  const storeys = [...hierarchy.byStorey.keys()]
+    .filter(
+      (expressId) =>
+        ifcStore.entities.getTypeName(expressId) === "IfcBuildingStorey",
+    )
+    .map((expressId, originalIndex) => ({
+      expressId,
+      originalIndex,
+      name:
+        ifcStore.entities.getName(expressId)?.trim() ||
+        `Piso ${originalIndex + 1}`,
+      elevation: hierarchy.storeyElevations.get(expressId),
+    }))
+    .sort((a, b) => {
+      const aHasElevation = Number.isFinite(a.elevation);
+      const bHasElevation = Number.isFinite(b.elevation);
+      if (aHasElevation && bHasElevation) {
+        return a.elevation - b.elevation || a.originalIndex - b.originalIndex;
+      }
+      if (aHasElevation !== bHasElevation) return aHasElevation ? -1 : 1;
+      return a.originalIndex - b.originalIndex;
+    });
+
+  if (storeys.length === 0) return [];
+  const floorIndexById = new Map(
+    storeys.map(({ expressId }, index) => [expressId, index]),
+  );
+  const meshFloorIndices = meshes.map((mesh) =>
+    floorIndexById.get(elementToStorey.get(mesh.expressId)),
+  );
+  const unassigned = [
+    ...new Set(
+      meshes
+        .filter((_, index) => meshFloorIndices[index] === undefined)
+        .map(({ expressId }) => expressId),
+    ),
+  ];
+  if (unassigned.length > 0) {
+    throw new Error(
+      `Não foi possível associar ${unassigned.length} elemento(s) IFC a um piso: ${unassigned.join(", ")}.`,
+    );
+  }
+
+  return storeys.map((storey, floorIndex) => ({
+    key: `floor-${floorIndex}`,
+    name: storey.name,
+    elevation: Number.isFinite(storey.elevation) ? storey.elevation : null,
+    meshes: meshes.filter(
+      (_, meshIndex) => meshFloorIndices[meshIndex] >= floorIndex,
+    ),
+  }));
 }
 
 export function filterRenderableMeshes(meshes) {

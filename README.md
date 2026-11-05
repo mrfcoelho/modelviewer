@@ -28,7 +28,10 @@ locais. No Android, o Scene Viewer não consegue abrir modelos mantidos numa URL
 `blob:`; para esses modelos, use WebXR (ou Quick Look em dispositivos
 compatíveis). Os modelos pré-carregados podem declarar um `ifcUrl` em
 `public/models.json`; o IFC correspondente deve ficar disponível junto ao GLB em
-`public/models/`.
+`public/models/`. A conversão gera também um GLB cumulativo por piso. No popup
+do projeto, selecione “Edifício completo” ou um piso para visualizar esse nível
+e todos os superiores. Os modelos locais guardados antes desta funcionalidade
+devem ser submetidos novamente para gerar as variantes por piso.
 
 As rotas da aplicação usam hash para funcionarem diretamente no GitHub Pages:
 `#/` (início), `#/explorar`, `#/submeter` e `#/ar/<id>-<modo>`.

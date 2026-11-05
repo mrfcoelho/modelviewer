@@ -72,9 +72,10 @@ export async function renderExplore(app, projects, navigate) {
   centerControl.addTo(leafletMap);
 }
 
-export async function renderAR(app, project, arMode, navigate) {
+export async function renderAR(app, project, arMode, navigate, floorKey = null) {
   cleanupExplore();
-  if (location.hash !== `#/ar/${project.id}-${arMode}`) return;
+  const floorQuery = floorKey ? `?floor=${encodeURIComponent(floorKey)}` : "";
+  if (location.hash !== `#/ar/${project.id}-${arMode}${floorQuery}`) return;
   const version = renderVersion;
   const page = document.createElement("main");
   page.className = "ar-page";
@@ -97,7 +98,8 @@ export async function renderAR(app, project, arMode, navigate) {
   infoBox.id = "infoBox";
   infoBox.setAttribute("role", "status");
   infoBox.setAttribute("aria-live", "polite");
-  page.append(backButton, modelContainer, infoBox);
+  modelContainer.append(infoBox);
+  page.append(backButton, modelContainer);
   app.replaceChildren(page);
 
   let modelViewer = null;
@@ -105,6 +107,7 @@ export async function renderAR(app, project, arMode, navigate) {
   let originalEmissiveFactor = null;
   let disposed = false;
   let selectionVersion = 0;
+  let lastSelectionPoint = null;
 
   function setStatus(message, retry = false) {
     modelStatus.replaceChildren();
@@ -125,6 +128,7 @@ export async function renderAR(app, project, arMode, navigate) {
 
   function clearSelection() {
     selectionVersion += 1;
+    lastSelectionPoint = null;
     if (selectedMaterial) {
       selectedMaterial.setEmissiveFactor(originalEmissiveFactor);
       selectedMaterial = null;
@@ -148,7 +152,8 @@ export async function renderAR(app, project, arMode, navigate) {
     originalEmissiveFactor = [...material.emissiveFactor];
     material.setEmissiveFactor([1, 0, 0]);
     infoBox.style.display = "block";
-    positionInfoBox(event, infoBox);
+    lastSelectionPoint = { clientX: event.clientX, clientY: event.clientY };
+    positionInfoBox(lastSelectionPoint, infoBox, modelContainer);
 
     const ifcElement = material.name?.match(/^ifc-element-(\d+)$/);
     if (!ifcElement) {
@@ -163,13 +168,19 @@ export async function renderAR(app, project, arMode, navigate) {
       const element = await getIfcElementInfo(project, expressId);
       if (disposed || version !== selectionVersion) return;
       renderElementInfo(infoBox, element);
-      positionInfoBox(event, infoBox);
+      positionInfoBox(lastSelectionPoint, infoBox, modelContainer);
     } catch (error) {
       if (disposed || version !== selectionVersion) return;
       console.error("Não foi possível carregar as propriedades IFC:", error);
       const message = error instanceof Error ? error.message : String(error);
       infoBox.textContent = `Elemento IFC #${expressId}. Não foi possível carregar as propriedades: ${message}`;
-      positionInfoBox(event, infoBox);
+      positionInfoBox(lastSelectionPoint, infoBox, modelContainer);
+    }
+  }
+
+  function repositionInfoBox() {
+    if (lastSelectionPoint && infoBox.style.display !== "none") {
+      positionInfoBox(lastSelectionPoint, infoBox, modelContainer);
     }
   }
 
@@ -217,7 +228,13 @@ export async function renderAR(app, project, arMode, navigate) {
       modelViewer.setAttribute("disable-tap", "");
       modelViewer.setAttribute("ar-modes", arMode);
       modelViewer.setAttribute("src", getModelUrl(project.modelUrl));
-      modelViewer.setAttribute("alt", `Modelo 3D de ${project.name}`);
+      const floorDescription = project.selectedFloor
+        ? ` a partir de ${project.selectedFloor} e pisos superiores`
+        : "";
+      modelViewer.setAttribute(
+        "alt",
+        `Modelo 3D de ${project.name}${floorDescription}`,
+      );
       modelViewer.addEventListener("load", onModelLoad);
       modelViewer.addEventListener("error", onModelError);
       modelViewer.addEventListener("click", onModelClick);
@@ -233,10 +250,14 @@ export async function renderAR(app, project, arMode, navigate) {
 
   activeCleanup = () => {
     disposed = true;
+    window.removeEventListener("resize", repositionInfoBox);
+    window.visualViewport?.removeEventListener("resize", repositionInfoBox);
     removeModelViewer();
     clearSelection();
   };
 
+  window.addEventListener("resize", repositionInfoBox);
+  window.visualViewport?.addEventListener("resize", repositionInfoBox);
   await loadModelViewer();
 }
 
@@ -304,6 +325,23 @@ function createProjectPopup(project, navigate) {
     option.textContent = modeLabel(mode);
     modeSelect.append(option);
   });
+  let floorSelect = null;
+  if (project.floorModels?.length) {
+    floorSelect = document.createElement("select");
+    floorSelect.setAttribute("aria-label", "Piso a partir do qual visualizar");
+    const fullBuilding = document.createElement("option");
+    fullBuilding.value = "";
+    fullBuilding.textContent = "Edifício completo";
+    floorSelect.append(fullBuilding);
+    for (const floor of project.floorModels) {
+      const option = document.createElement("option");
+      option.value = floor.key;
+      option.textContent = floor.elevation === null
+        ? floor.name
+        : `${floor.name} (${floor.elevation.toFixed(2)} m)`;
+      floorSelect.append(option);
+    }
+  }
   if (project.localModel) {
     const arNotice = document.createElement("p");
     arNotice.textContent =
@@ -317,8 +355,12 @@ function createProjectPopup(project, navigate) {
   viewButton.addEventListener("click", () => {
     mapCenter = leafletMap.getCenter();
     mapZoom = leafletMap.getZoom();
-    navigate(`#/ar/${project.id}-${modeSelect.value}`);
+    const floorQuery = floorSelect?.value
+      ? `?floor=${encodeURIComponent(floorSelect.value)}`
+      : "";
+    navigate(`#/ar/${project.id}-${modeSelect.value}${floorQuery}`);
   });
+  if (floorSelect) popup.append(floorSelect);
   popup.append(modeSelect, viewButton);
   return popup;
 }
@@ -423,20 +465,16 @@ function locateUser(L, controlButton) {
   });
 }
 
-function positionInfoBox(event, infoBox) {
+function positionInfoBox(point, infoBox, container) {
   const padding = 10;
+  const bounds = container.getBoundingClientRect();
   const boxWidth = infoBox.offsetWidth;
   const boxHeight = infoBox.offsetHeight;
-  let x = event.clientX + 15;
-  let y = event.clientY + 15;
+  const maxX = Math.max(padding, bounds.width - boxWidth - padding);
+  const maxY = Math.max(padding, bounds.height - boxHeight - padding);
+  const x = point.clientX - bounds.left + 15;
+  const y = point.clientY - bounds.top + 15;
 
-  if (x + boxWidth + padding > window.innerWidth) {
-    x = window.innerWidth - boxWidth - padding;
-  }
-  if (y + boxHeight + padding > window.innerHeight) {
-    y = window.innerHeight - boxHeight - padding;
-  }
-
-  infoBox.style.left = `${Math.max(padding, x)}px`;
-  infoBox.style.top = `${Math.max(padding, y)}px`;
+  infoBox.style.left = `${Math.min(maxX, Math.max(padding, x))}px`;
+  infoBox.style.top = `${Math.min(maxY, Math.max(padding, y))}px`;
 }

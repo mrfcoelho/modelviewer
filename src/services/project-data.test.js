@@ -28,10 +28,29 @@ test("accepts a submitted local project without a published model path", () => {
 
 test("validates and keeps an optional IFC path for published projects", () => {
   const [project] = validateProjects([
-    { ...validProject, ifcUrl: "models/demo.ifc" },
+    {
+      ...validProject,
+      ifcUrl: "models/demo.ifc",
+      floorModels: [
+        {
+          key: "floor-0",
+          name: "Piso 0",
+          elevation: 0,
+          modelUrl: "models/demo-from-floor-0.glb",
+        },
+      ],
+    },
   ]);
 
   assert.equal(project.ifcUrl, "models/demo.ifc");
+  assert.deepEqual(project.floorModels, [
+    {
+      key: "floor-0",
+      name: "Piso 0",
+      elevation: 0,
+      modelUrl: "models/demo-from-floor-0.glb",
+    },
+  ]);
 });
 
 test("rejects unknown statuses", () => {
@@ -54,6 +73,23 @@ test("rejects invalid coordinates and model paths", () => {
     () =>
       validateProjects([
         { ...validProject, ifcUrl: "models/../private.ifc" },
+      ]),
+    /Dados inválidos/,
+  );
+  assert.throws(
+    () =>
+      validateProjects([
+        {
+          ...validProject,
+          floorModels: [
+            {
+              key: "floor-0",
+              name: "Piso 0",
+              elevation: 0,
+              modelUrl: "models/../private.glb",
+            },
+          ],
+        },
       ]),
     /Dados inválidos/,
   );
