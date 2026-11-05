@@ -26,7 +26,9 @@ consulta após recarregar a página volta a analisar o IFC original e pode demor
 alguns instantes. Apagar os dados do site no navegador também remove os projetos
 locais. No Android, o Scene Viewer não consegue abrir modelos mantidos numa URL
 `blob:`; para esses modelos, use WebXR (ou Quick Look em dispositivos
-compatíveis).
+compatíveis). Os modelos pré-carregados podem declarar um `ifcUrl` em
+`public/models.json`; o IFC correspondente deve ficar disponível junto ao GLB em
+`public/models/`.
 
 As rotas da aplicação usam hash para funcionarem diretamente no GitHub Pages:
 `#/` (início), `#/explorar`, `#/submeter` e `#/ar/<id>-<modo>`.
@@ -41,3 +43,8 @@ recentemente.
 
 A aplicação principal está em <https://mrfcoelho.github.io/modelviewer/> e é
 atualizada quando há alterações na branch `main`.
+
+## Roadmap
+
+- [ ] obter a localização dos IFC no mapa a partir da georreferenciação dos IFC, mantendo o posicionamento manual como fallback para os casos em que o IFC não venha georreferenciado
+- [ ] ao converter o IFC para GLB, criar `building-all.glb` (edifício completo), `building-from-floor-0.glb` (piso 0 e superiores), `building-from-floor-1.glb` (piso 1 e superiores), e assim sucessivamente. Isto permite entrar e sair do Scene Viewer para ver um piso de cada vez em modo AR.

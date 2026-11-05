@@ -1,11 +1,11 @@
-import { getLocalIfcBlob } from "./project-data.js";
+import { getLocalIfcBlob, getModelUrl } from "./project-data.js";
 
 let cachedProjectId = null;
 let cachedStore = null;
 const pendingStores = new Map();
 
-export async function getIfcElementInfo(projectId, expressId) {
-  const store = await getStore(projectId);
+export async function getIfcElementInfo(project, expressId) {
+  const store = await getStore(project);
   const {
     extractAllEntityAttributes,
     extractPropertiesOnDemand,
@@ -21,29 +21,41 @@ export async function getIfcElementInfo(projectId, expressId) {
   };
 }
 
-async function getStore(projectId) {
-  if (cachedProjectId === projectId) return cachedStore;
-  if (pendingStores.has(projectId)) return pendingStores.get(projectId);
+async function getStore(project) {
+  if (cachedProjectId === project.id) return cachedStore;
+  if (pendingStores.has(project.id)) return pendingStores.get(project.id);
 
   cachedProjectId = null;
   cachedStore = null;
-  const loading = loadStore(projectId);
-  pendingStores.set(projectId, loading);
+  const loading = loadStore(project);
+  pendingStores.set(project.id, loading);
   try {
     const store = await loading;
-    cachedProjectId = projectId;
+    cachedProjectId = project.id;
     cachedStore = store;
     return store;
   } finally {
-    pendingStores.delete(projectId);
+    pendingStores.delete(project.id);
   }
 }
 
-async function loadStore(projectId) {
-  const file = await getLocalIfcBlob(projectId);
+async function loadStore(project) {
+  let file;
+  if (project.localModel) {
+    file = await getLocalIfcBlob(project.id);
+  } else if (project.ifcUrl) {
+    const response = await fetch(getModelUrl(project.ifcUrl));
+    if (!response.ok) {
+      throw new Error(
+        `Não foi possível carregar o IFC original (${response.status}).`,
+      );
+    }
+    file = await response.blob();
+  }
+
   if (!file) {
     throw new Error(
-      "O ficheiro IFC original já não está disponível neste navegador.",
+      "O ficheiro IFC original não está disponível para este projeto.",
     );
   }
 

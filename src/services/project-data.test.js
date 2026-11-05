@@ -26,6 +26,14 @@ test("accepts a submitted local project without a published model path", () => {
   assert.equal(project.modelUrl, null);
 });
 
+test("validates and keeps an optional IFC path for published projects", () => {
+  const [project] = validateProjects([
+    { ...validProject, ifcUrl: "models/demo.ifc" },
+  ]);
+
+  assert.equal(project.ifcUrl, "models/demo.ifc");
+});
+
 test("rejects unknown statuses", () => {
   assert.throws(
     () => validateProjects([{ ...validProject, status: "pending" }]),
@@ -40,6 +48,13 @@ test("rejects invalid coordinates and model paths", () => {
   );
   assert.throws(
     () => validateProjects([{ ...validProject, modelUrl: "models/../private.glb" }]),
+    /Dados inválidos/,
+  );
+  assert.throws(
+    () =>
+      validateProjects([
+        { ...validProject, ifcUrl: "models/../private.ifc" },
+      ]),
     /Dados inválidos/,
   );
 });

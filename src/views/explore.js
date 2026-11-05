@@ -155,7 +155,7 @@ export async function renderAR(app, project, arMode, navigate) {
     const expressId = Number(ifcElement[1]);
     infoBox.textContent = `Elemento IFC #${expressId}: a carregar propriedades…`;
     try {
-      const element = await getIfcElementInfo(project.id, expressId);
+      const element = await getIfcElementInfo(project, expressId);
       if (disposed || version !== selectionVersion) return;
       renderElementInfo(infoBox, element);
       positionInfoBox(event, infoBox);

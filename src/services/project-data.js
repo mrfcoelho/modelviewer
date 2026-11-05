@@ -31,6 +31,10 @@ export function validateProjects(data) {
           /^models\/[A-Za-z0-9._/-]+\.(glb|gltf)$/i.test(project.modelUrl) &&
           !project.modelUrl.split("/").includes(".."))
       ) ||
+      (project.ifcUrl !== undefined &&
+        (typeof project.ifcUrl !== "string" ||
+          !/^models\/[A-Za-z0-9._/-]+\.ifc$/i.test(project.ifcUrl) ||
+          project.ifcUrl.split("/").includes(".."))) ||
       ["description", "responsible", "fileName"].some(
         (field) =>
           project[field] !== undefined && typeof project[field] !== "string",
@@ -48,6 +52,7 @@ export function validateProjects(data) {
       status: project.status,
       coords: [...project.coords],
       modelUrl: project.modelUrl,
+      ...(project.ifcUrl ? { ifcUrl: project.ifcUrl } : {}),
       ...(project.fileName ? { fileName: project.fileName } : {}),
     };
   });
