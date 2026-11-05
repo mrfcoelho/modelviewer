@@ -1,15 +1,18 @@
 [
   {
     "id": "1",
-    "name": "CCG",
-    "status": "submitted",
+    "name": "Centro de Computação Gráfica",
+    "responsible": "CCG/zgdv Institute",
+    "status": "approved",
     "coords": [41.45330011034379, -8.28837129166596],
     "modelUrl": "models/ccg.glb",
     "ifcUrl": "models/ccg.ifc"
   },
   {
     "id": "6",
-    "name": "Café",
+    "name": "Café Universitário",
+    "responsible": "Universidade do Minho",
+    "description": "Café de apoio à Escola de Ciências da Universidade do Minho",
     "status": "submitted",
     "coords": [41.4526464430352, -8.2899495293004],
     "modelUrl": "models/cafe.glb",
